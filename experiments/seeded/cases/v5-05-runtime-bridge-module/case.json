@@ -1,0 +1,11 @@
+{
+  "id": "v5-05-runtime-bridge-module",
+  "category": "V5",
+  "variant": "global module resolving a context provider at runtime",
+  "description": "A global module in src/common exposes billing InvoicingService under a string token via ModuleRef; clinical injects the token.",
+  "expected": "detected",
+  "expectedRules": [
+    "R8",
+    "R11"
+  ]
+}

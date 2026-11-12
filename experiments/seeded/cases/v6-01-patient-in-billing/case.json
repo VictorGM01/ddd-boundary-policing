@@ -1,0 +1,8 @@
+{
+  "id": "v6-01-patient-in-billing",
+  "category": "V6",
+  "variant": "clinical role modeled in billing",
+  "description": "Billing introduces a Patient class with allergies and chronic conditions to adjust prices.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

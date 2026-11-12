@@ -1,0 +1,10 @@
+{
+  "id": "v4-01-contract-imports-entity",
+  "category": "V4",
+  "variant": "published language references the publisher entity",
+  "description": "The clinical contract embeds the internal EncounterSnapshot type in EncounterCompleted.",
+  "expected": "detected",
+  "expectedRules": [
+    "R4"
+  ]
+}

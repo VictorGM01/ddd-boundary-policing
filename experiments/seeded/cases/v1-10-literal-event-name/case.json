@@ -1,0 +1,10 @@
+{
+  "id": "v1-10-literal-event-name",
+  "category": "V1",
+  "variant": "V1.b: literal event name, no contract import",
+  "description": "Scheduling subscribes to the clinical event by its literal string name, with a locally redeclared payload type.",
+  "expected": "detected",
+  "expectedRules": [
+    "R10"
+  ]
+}

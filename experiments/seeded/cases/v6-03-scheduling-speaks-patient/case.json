@@ -1,0 +1,8 @@
+{
+  "id": "v6-03-scheduling-speaks-patient",
+  "category": "V6",
+  "variant": "scheduling adopts the clinical vocabulary",
+  "description": "Scheduling introduces a Patient with medical record number to book follow-up consultations.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

@@ -1,0 +1,10 @@
+{
+  "id": "v2-01-foreign-repository-import",
+  "category": "V2",
+  "variant": "import another context repository",
+  "description": "Billing injects the clinical EncounterRepository to read procedure codes directly instead of using the event payload.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1"
+  ]
+}

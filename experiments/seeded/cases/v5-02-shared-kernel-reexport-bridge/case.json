@@ -1,0 +1,11 @@
+{
+  "id": "v5-02-shared-kernel-reexport-bridge",
+  "category": "V5",
+  "variant": "shared kernel re-exports a context class",
+  "description": "The shared kernel re-exports billing PriceList and clinical imports it from there, with no direct clinical→billing import.",
+  "expected": "detected",
+  "expectedRules": [
+    "R3",
+    "R5"
+  ]
+}

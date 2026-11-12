@@ -1,0 +1,8 @@
+{
+  "id": "v2-08-destructured-delegate",
+  "category": "V2",
+  "variant": "delegate obtained by destructuring",
+  "description": "Clinical infrastructure destructures billingInvoice out of PrismaService.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

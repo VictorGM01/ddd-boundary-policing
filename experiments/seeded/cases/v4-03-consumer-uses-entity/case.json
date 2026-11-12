@@ -1,0 +1,10 @@
+{
+  "id": "v4-03-consumer-uses-entity",
+  "category": "V4",
+  "variant": "downstream domain takes the upstream entity as model",
+  "description": "Billing domain computes invoice lines from the clinical Encounter entity instead of the event payload.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1"
+  ]
+}

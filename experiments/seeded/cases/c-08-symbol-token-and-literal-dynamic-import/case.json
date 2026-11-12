@@ -1,0 +1,8 @@
+{
+  "id": "c-08-symbol-token-and-literal-dynamic-import",
+  "category": "CONTROL-LEGIT",
+  "variant": "symbol injection token and dynamic import of own file",
+  "description": "Scheduling injects a config value with a Symbol token and lazily imports one of its own files with a literal path.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

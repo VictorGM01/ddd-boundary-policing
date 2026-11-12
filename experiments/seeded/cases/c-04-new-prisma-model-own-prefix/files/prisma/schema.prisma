@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model SchedulingAppointment {
+  id               String   @id
+  practitionerId   String
+  requesterId      String
+  requesterName    String
+  requesterPhone   String
+  startsAt         DateTime
+  endsAt           DateTime
+  status           String
+  cancelReason     String?
+  createdAt        DateTime @default(now())
+
+  @@index([practitionerId, startsAt])
+}
+
+model FrontDeskVisit {
+  id             String    @id
+  appointmentId  String    @unique
+  personId       String
+  practitionerId String
+  expectedAt     DateTime
+  status         String
+  checkedInAt    DateTime?
+}
+
+model ClinicalEncounter {
+  id             String    @id
+  appointmentId  String    @unique
+  patientId      String
+  practitionerId String
+  status         String
+  notes          String?
+  diagnosisCodes String    @default("[]")
+  procedureCodes String    @default("[]")
+  arrivedAt      DateTime
+  startedAt      DateTime?
+  completedAt    DateTime?
+}
+
+model BillingInvoice {
+  id         String               @id
+  payerId    String
+  sourceType String
+  sourceId   String
+  status     String
+  totalCents Int
+  issuedAt   DateTime
+  lines      BillingInvoiceLine[]
+
+  @@unique([sourceType, sourceId])
+}
+
+model BillingInvoiceLine {
+  id          String         @id
+  invoiceId   String
+  code        String
+  description String
+  amountCents Int
+  invoice     BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model BillingPayment {
+  id          String   @id
+  invoiceId   String
+  amountCents Int
+  paidAt      DateTime
+}

@@ -1,0 +1,10 @@
+{
+  "id": "v1-06-require-literal",
+  "category": "V1",
+  "variant": "require() with literal path",
+  "description": "Clinical reads the front-desk waiting queue through a CommonJS require with a literal path.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1"
+  ]
+}

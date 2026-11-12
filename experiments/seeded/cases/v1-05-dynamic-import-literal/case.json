@@ -1,0 +1,10 @@
+{
+  "id": "v1-05-dynamic-import-literal",
+  "category": "V1",
+  "variant": "dynamic import() with literal path",
+  "description": "Billing lazily loads the clinical Encounter module with await import() and a literal path.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1"
+  ]
+}

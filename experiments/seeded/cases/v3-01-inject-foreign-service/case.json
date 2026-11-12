@@ -1,0 +1,10 @@
+{
+  "id": "v3-01-inject-foreign-service",
+  "category": "V3",
+  "variant": "constructor injection of another context service",
+  "description": "Clinical completes the encounter and synchronously calls billing InvoicingService to issue the invoice.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1"
+  ]
+}

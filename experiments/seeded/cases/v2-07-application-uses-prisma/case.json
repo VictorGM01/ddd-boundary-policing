@@ -1,0 +1,10 @@
+{
+  "id": "v2-07-application-uses-prisma",
+  "category": "V2",
+  "variant": "application layer bypasses own repository",
+  "description": "Scheduling application service injects PrismaService to query its own appointments directly.",
+  "expected": "detected",
+  "expectedRules": [
+    "R6"
+  ]
+}

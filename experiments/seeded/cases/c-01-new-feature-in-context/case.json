@@ -1,0 +1,8 @@
+{
+  "id": "c-01-new-feature-in-context",
+  "category": "CONTROL-LEGIT",
+  "variant": "new use case inside one context",
+  "description": "Scheduling gains a reschedule use case built only from its own domain and repository.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

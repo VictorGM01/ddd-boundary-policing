@@ -1,0 +1,10 @@
+{
+  "id": "v2-02-foreign-prisma-delegate",
+  "category": "V2",
+  "variant": "foreign delegate via shared PrismaService",
+  "description": "Clinical infrastructure reads BillingInvoice rows through the shared PrismaService to show debts in the medical record.",
+  "expected": "detected",
+  "expectedRules": [
+    "R7"
+  ]
+}

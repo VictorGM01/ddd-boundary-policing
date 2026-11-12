@@ -1,0 +1,11 @@
+{
+  "id": "v5-01-shared-kernel-imports-context",
+  "category": "V5",
+  "variant": "shared kernel depends on a context",
+  "description": "A shared-kernel helper imports the clinical EncounterRepository type to offer a generic patient lookup.",
+  "expected": "detected",
+  "expectedRules": [
+    "R3",
+    "R5"
+  ]
+}

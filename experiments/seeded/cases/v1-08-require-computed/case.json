@@ -1,0 +1,10 @@
+{
+  "id": "v1-08-require-computed",
+  "category": "V1",
+  "variant": "require() with computed path",
+  "description": "Clinical loads billing PriceList via require(path.join(...)).",
+  "expected": "detected",
+  "expectedRules": [
+    "R13"
+  ]
+}

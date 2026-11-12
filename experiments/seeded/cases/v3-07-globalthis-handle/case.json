@@ -1,0 +1,8 @@
+{
+  "id": "v3-07-globalthis-handle",
+  "category": "V3",
+  "variant": "service handle stashed on globalThis",
+  "description": "Billing stores its InvoicingService on globalThis at startup and clinical calls it synchronously.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

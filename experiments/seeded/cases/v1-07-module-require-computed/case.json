@@ -1,0 +1,8 @@
+{
+  "id": "v1-07-module-require-computed",
+  "category": "V1",
+  "variant": "module.require with computed path",
+  "description": "Clinical loads billing PriceList via module.require with a path assembled at runtime.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

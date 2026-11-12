@@ -1,0 +1,8 @@
+{
+  "id": "v2-05-raw-sql",
+  "category": "V2",
+  "variant": "raw SQL on another context table",
+  "description": "Clinical infrastructure queries the BillingInvoice table with $queryRawUnsafe.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

@@ -1,0 +1,11 @@
+{
+  "id": "v3-02-moduleref-class-token",
+  "category": "V3",
+  "variant": "ModuleRef.get with a class token",
+  "description": "Scheduling resolves the front-desk VisitsService at runtime with ModuleRef to check whether the visitor arrived.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1",
+    "R8"
+  ]
+}

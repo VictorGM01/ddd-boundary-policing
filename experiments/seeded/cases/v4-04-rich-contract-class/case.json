@@ -1,0 +1,8 @@
+{
+  "id": "v4-04-rich-contract-class",
+  "category": "V4",
+  "variant": "contract defines a class with domain behaviour",
+  "description": "The clinical contract turns EncounterCompleted into a class with billing-related behaviour (isBillable, consultationIncluded).",
+  "expected": "not_detected",
+  "expectedRules": []
+}

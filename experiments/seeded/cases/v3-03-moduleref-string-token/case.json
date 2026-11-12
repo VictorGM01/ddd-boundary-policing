@@ -1,0 +1,10 @@
+{
+  "id": "v3-03-moduleref-string-token",
+  "category": "V3",
+  "variant": "ModuleRef.get with a string token",
+  "description": "Clinical resolves billing InvoicingService by name with ModuleRef, without importing it.",
+  "expected": "detected",
+  "expectedRules": [
+    "R8"
+  ]
+}

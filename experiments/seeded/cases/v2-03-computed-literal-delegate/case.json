@@ -1,0 +1,10 @@
+{
+  "id": "v2-03-computed-literal-delegate",
+  "category": "V2",
+  "variant": "computed member access with string literal",
+  "description": "Clinical infrastructure checks the front-desk visit table with prisma[\"frontDeskVisit\"].",
+  "expected": "detected",
+  "expectedRules": [
+    "R7"
+  ]
+}

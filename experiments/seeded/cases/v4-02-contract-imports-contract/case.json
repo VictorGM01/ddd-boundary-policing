@@ -1,0 +1,10 @@
+{
+  "id": "v4-02-contract-imports-contract",
+  "category": "V4",
+  "variant": "one published language reuses another",
+  "description": "The front-desk contract extends the scheduling AppointmentScheduled payload instead of declaring its own fields.",
+  "expected": "detected",
+  "expectedRules": [
+    "R4"
+  ]
+}

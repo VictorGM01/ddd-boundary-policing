@@ -1,0 +1,8 @@
+{
+  "id": "c-04-new-prisma-model-own-prefix",
+  "category": "CONTROL-LEGIT",
+  "variant": "new persistence model owned by the context",
+  "description": "Billing adds a BillingPayment model and a repository in its own infrastructure that uses it.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

@@ -1,0 +1,11 @@
+{
+  "id": "v3-04-module-exports-and-imports",
+  "category": "V3",
+  "variant": "context module exports a provider and another imports the module",
+  "description": "Billing exports InvoicingService and the clinical module imports BillingModule to use it.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1",
+    "R9"
+  ]
+}

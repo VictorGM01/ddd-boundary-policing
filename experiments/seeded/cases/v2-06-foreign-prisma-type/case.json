@@ -1,0 +1,10 @@
+{
+  "id": "v2-06-foreign-prisma-type",
+  "category": "V2",
+  "variant": "generated type of a foreign model",
+  "description": "Front-desk infrastructure maps a SchedulingAppointment row type imported from @prisma/client.",
+  "expected": "detected",
+  "expectedRules": [
+    "R7"
+  ]
+}

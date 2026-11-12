@@ -1,0 +1,10 @@
+{
+  "id": "v1-03-type-only-import",
+  "category": "V1",
+  "variant": "import type",
+  "description": "Billing types a helper with the clinical EncounterSnapshot using a type-only import (erased at runtime).",
+  "expected": "detected",
+  "expectedRules": [
+    "R1"
+  ]
+}

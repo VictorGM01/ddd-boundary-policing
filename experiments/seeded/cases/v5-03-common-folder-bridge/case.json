@@ -1,0 +1,10 @@
+{
+  "id": "v5-03-common-folder-bridge",
+  "category": "V5",
+  "variant": "new common/ layer bridges two contexts",
+  "description": "A new src/common/billing-facade.ts wraps billing InvoicingService and clinical uses the facade.",
+  "expected": "detected",
+  "expectedRules": [
+    "R5"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "id": "c-06-names-mention-other-context",
+  "category": "CONTROL-LEGIT",
+  "variant": "names that mention another context without depending on it",
+  "description": "Clinical adds billing-code.ts (formatting its own procedure codes) and front desk tracks a billingStatus flag on its own visit view.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

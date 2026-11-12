@@ -1,0 +1,10 @@
+{
+  "id": "v1-02-alias-import",
+  "category": "V1",
+  "variant": "path alias import",
+  "description": "Front desk greets the visitor by name by importing the scheduling Appointment entity through the @/ alias.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1"
+  ]
+}

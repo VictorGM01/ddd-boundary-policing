@@ -1,0 +1,8 @@
+{
+  "id": "v6-02-diagnoses-in-billing",
+  "category": "V6",
+  "variant": "clinical data and terms leak into billing",
+  "description": "Billing models an insurance claim carrying diagnosis codes and anamnesis notes for the payer.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

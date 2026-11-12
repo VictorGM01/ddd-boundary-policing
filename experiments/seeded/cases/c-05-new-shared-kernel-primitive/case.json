@@ -1,0 +1,8 @@
+{
+  "id": "c-05-new-shared-kernel-primitive",
+  "category": "CONTROL-LEGIT",
+  "variant": "new primitive in the shared kernel",
+  "description": "The shared kernel gains a Money value object (no domain meaning of its own) used by billing.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

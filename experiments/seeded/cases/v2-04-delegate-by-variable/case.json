@@ -1,0 +1,8 @@
+{
+  "id": "v2-04-delegate-by-variable",
+  "category": "V2",
+  "variant": "computed member access with a variable",
+  "description": "Clinical infrastructure reaches the billing table with a delegate name assembled at runtime.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

@@ -1,0 +1,10 @@
+{
+  "id": "v1-04-public-api-barrel",
+  "category": "V1",
+  "variant": "barrel / directory import",
+  "description": "Scheduling exposes an index.ts \"public API\" barrel and clinical imports the context folder, which resolves to the barrel.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1"
+  ]
+}

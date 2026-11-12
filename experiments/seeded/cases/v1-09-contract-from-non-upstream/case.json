@@ -1,0 +1,10 @@
+{
+  "id": "v1-09-contract-from-non-upstream",
+  "category": "V1",
+  "variant": "V1.b: published language of a non-upstream context",
+  "description": "Scheduling listens to EncounterCompleted (clinical contract) to mark appointments as attended: a relation absent from the context map.",
+  "expected": "detected",
+  "expectedRules": [
+    "R2"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "id": "c-07-local-alias-of-contract-constant",
+  "category": "CONTROL-LEGIT",
+  "variant": "event name re-aliased from the contract inside the publisher",
+  "description": "Clinical aliases ClinicalEvents.EncounterCompleted in a local constant and emits with it.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

@@ -1,0 +1,8 @@
+{
+  "id": "v6-04-triage-in-front-desk",
+  "category": "V6",
+  "variant": "clinical rule reimplemented at the front desk",
+  "description": "Front desk prioritises the waiting queue by symptoms (a clinical triage rule).",
+  "expected": "not_detected",
+  "expectedRules": []
+}

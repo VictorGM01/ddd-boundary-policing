@@ -1,0 +1,8 @@
+{
+  "id": "v5-06-domain-concept-in-shared-kernel",
+  "category": "V5",
+  "variant": "billing concept moved into the shared kernel",
+  "description": "The procedure price table (a billing concept) is moved into the shared kernel so clinical can show prices; no context is imported.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

@@ -1,0 +1,8 @@
+{
+  "id": "c-10-spec-with-in-memory-repo",
+  "category": "CONTROL-LEGIT",
+  "variant": "test code inside a context",
+  "description": "A new spec in front desk with an in-memory repository and the scheduling contract it legitimately consumes.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

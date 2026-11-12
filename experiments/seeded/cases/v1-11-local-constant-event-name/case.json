@@ -1,0 +1,8 @@
+{
+  "id": "v1-11-local-constant-event-name",
+  "category": "V1",
+  "variant": "V1.b: event name hidden in a local constant",
+  "description": "Same as v1-10 but the literal event name is stored in a local constant before being passed to @OnEvent.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

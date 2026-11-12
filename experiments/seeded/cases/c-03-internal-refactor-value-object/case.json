@@ -1,0 +1,8 @@
+{
+  "id": "c-03-internal-refactor-value-object",
+  "category": "CONTROL-LEGIT",
+  "variant": "internal refactor",
+  "description": "Scheduling extracts a TimeSlot value object used by a new availability policy in the same context.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

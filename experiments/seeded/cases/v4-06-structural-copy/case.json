@@ -1,0 +1,8 @@
+{
+  "id": "v4-06-structural-copy",
+  "category": "V4",
+  "variant": "internal type duplicated by hand",
+  "description": "Billing declares a copy of the clinical EncounterSnapshot shape (same fields and status union) to work with encounters.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

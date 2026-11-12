@@ -1,0 +1,8 @@
+{
+  "id": "c-09-insurance-contracts-folder",
+  "category": "CONTROL-LEGIT",
+  "variant": "context-internal folder named contracts",
+  "description": "Billing models health-insurance agreements (convênios) in its own domain/contracts/ folder and imports them relatively.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

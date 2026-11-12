@@ -1,0 +1,10 @@
+{
+  "id": "v3-05-string-injection-token",
+  "category": "V3",
+  "variant": "@Inject with a string token",
+  "description": "Clinical injects a provider registered by billing under the string token PRICE_LIST.",
+  "expected": "detected",
+  "expectedRules": [
+    "R11"
+  ]
+}

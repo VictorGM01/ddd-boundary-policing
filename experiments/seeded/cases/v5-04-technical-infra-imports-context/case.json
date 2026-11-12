@@ -1,0 +1,10 @@
+{
+  "id": "v5-04-technical-infra-imports-context",
+  "category": "V5",
+  "variant": "technical infrastructure depends on a context",
+  "description": "An HTTP audit interceptor in src/infrastructure reads the front-desk waiting queue.",
+  "expected": "detected",
+  "expectedRules": [
+    "R5"
+  ]
+}

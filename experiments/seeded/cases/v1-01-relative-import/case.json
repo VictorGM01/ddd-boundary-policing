@@ -1,0 +1,10 @@
+{
+  "id": "v1-01-relative-import",
+  "category": "V1",
+  "variant": "relative import",
+  "description": "Clinical estimates the cost of an encounter by importing PriceList from billing with a relative path.",
+  "expected": "detected",
+  "expectedRules": [
+    "R1"
+  ]
+}

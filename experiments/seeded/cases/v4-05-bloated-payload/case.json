@@ -1,0 +1,8 @@
+{
+  "id": "v4-05-bloated-payload",
+  "category": "V4",
+  "variant": "payload copies the internal model",
+  "description": "EncounterCompleted starts carrying diagnoses, clinical notes and timestamps, i.e. the whole internal encounter.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

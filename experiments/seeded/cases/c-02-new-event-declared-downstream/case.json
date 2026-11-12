@@ -1,0 +1,8 @@
+{
+  "id": "c-02-new-event-declared-downstream",
+  "category": "CONTROL-LEGIT",
+  "variant": "new event in the published language, consumed by a declared downstream",
+  "description": "Scheduling publishes AppointmentRescheduled and front desk (downstream in M1) consumes it via the contract constant.",
+  "expected": "not_detected",
+  "expectedRules": []
+}

@@ -1,0 +1,8 @@
+{
+  "id": "v3-06-bus-as-rpc",
+  "category": "V3",
+  "variant": "request/response over the event bus",
+  "description": "Clinical reads the value returned by the billing listener from emitAsync to show the invoice total right after completing the encounter.",
+  "expected": "not_detected",
+  "expectedRules": []
+}
