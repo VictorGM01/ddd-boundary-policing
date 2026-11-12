@@ -1,0 +1,8 @@
+{
+  "contexts": {
+    "scheduling": { "prismaPrefix": "Scheduling", "publishes": "scheduling.events.ts", "upstream": [] },
+    "front-desk": { "prismaPrefix": "FrontDesk", "publishes": "front-desk.events.ts", "upstream": ["scheduling"] },
+    "clinical": { "prismaPrefix": "Clinical", "publishes": "clinical.events.ts", "upstream": ["front-desk"] },
+    "billing": { "prismaPrefix": "Billing", "publishes": null, "upstream": ["clinical", "scheduling"] }
+  }
+}
