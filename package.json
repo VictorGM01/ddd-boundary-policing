@@ -22,7 +22,10 @@
     "check:arch": "node scripts/check-arch.mjs",
     "arch:graph": "depcruise src --config .dependency-cruiser.cjs --include-only \"^src/\" --exclude \"\\\\.spec\\\\.ts$\" --output-type mermaid --output-to docs/grafo-de-dependencias.mmd && node scripts/wrap-mermaid.mjs docs/grafo-de-dependencias.mmd docs/grafo-de-dependencias.md",
     "arch:graph:contexts": "depcruise src --config .dependency-cruiser.cjs --collapse \"^src/(modules/[^/]+|contracts|shared-kernel|infrastructure)\" --include-only \"^src/\" --exclude \"\\\\.spec\\\\.ts$\" --output-type mermaid --output-to docs/grafo-de-contextos.mmd && node scripts/wrap-mermaid.mjs docs/grafo-de-contextos.mmd docs/grafo-de-contextos.md",
-    "eval:seeded": "node scripts/eval-seeded.mjs"
+    "eval:seeded": "node scripts/eval-seeded.mjs",
+    "e1": "node scripts/e1/run.mjs",
+    "e1:preflight": "node scripts/e1/preflight.mjs",
+    "e1:report": "node scripts/e1/aggregate.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.10",
