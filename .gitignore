@@ -152,5 +152,3 @@ vite.config.ts.timestamp-*
 prisma/*.db
 prisma/*.db-journal
 
-# seeded evaluation scratch
-experiments/seeded/.work/

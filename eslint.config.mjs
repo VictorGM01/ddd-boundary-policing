@@ -130,7 +130,7 @@ const boundaryPolicies = [
 ];
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'experiments/seeded/.work/**'] },
+  { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'experiments/seeded/cases/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
