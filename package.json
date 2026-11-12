@@ -18,7 +18,10 @@
     "lint": "eslint .",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "jest --config jest.config.ts",
-    "test:e2e": "jest --config test/jest-e2e.config.ts --runInBand"
+    "test:e2e": "jest --config test/jest-e2e.config.ts --runInBand",
+    "check:arch": "node scripts/check-arch.mjs",
+    "arch:graph": "depcruise src --config .dependency-cruiser.cjs --include-only \"^src/\" --exclude \"\\\\.spec\\\\.ts$\" --output-type mermaid --output-to docs/grafo-de-dependencias.mmd && node scripts/wrap-mermaid.mjs docs/grafo-de-dependencias.mmd docs/grafo-de-dependencias.md",
+    "arch:graph:contexts": "depcruise src --config .dependency-cruiser.cjs --collapse \"^src/(modules/[^/]+|contracts|shared-kernel|infrastructure)\" --include-only \"^src/\" --exclude \"\\\\.spec\\\\.ts$\" --output-type mermaid --output-to docs/grafo-de-contextos.mmd && node scripts/wrap-mermaid.mjs docs/grafo-de-contextos.mmd docs/grafo-de-contextos.md"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.10",
@@ -30,18 +33,25 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@nestjs/cli": "^11.0.24",
     "@nestjs/testing": "^11.2.10",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.20.5",
     "@types/supertest": "^7.2.1",
+    "dependency-cruiser": "^17.4.3",
+    "eslint": "^10.14.0",
+    "eslint-import-resolver-typescript": "^4.4.5",
+    "eslint-plugin-boundaries": "^7.4.3",
+    "globals": "^17.14.0",
     "jest": "^30.5.2",
     "prisma": "^6.19.3",
     "supertest": "^7.3.2",
     "ts-jest": "^29.4.15",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "~5.9"
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.72.2"
   }
 }
