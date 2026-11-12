@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    env:
+      DATABASE_URL: file:./ci.db
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Architecture gate (check:arch)
+        run: |
+          start=$(date +%s%N)
+          npm run check:arch -- --json arch-report.json
+          end=$(date +%s%N)
+          wall_ms=$(( (end - start) / 1000000 ))
+          inner_ms=$(node -p "require('./arch-report.json').durationMs")
+          echo "| métrica | valor |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| tempo do gate (processo npm, wall clock) | ${wall_ms} ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| tempo do gate (medido pelo script) | ${inner_ms} ms |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Node | ${{ matrix.node }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-report-node${{ matrix.node }}
+          path: arch-report.json
+          if-no-files-found: ignore
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build
