@@ -89,7 +89,7 @@ if (jsonOut) {
         durationMs: Math.round(durationMs),
         dependencyCruiserMs: Math.round(depcruise.ms),
         eslintMs: Math.round(eslint.ms),
-        rulesFired: [...new Set(violations.map((v) => v.rule))].sort(),
+        rulesFired: [...new Set(violations.map((v) => v.rule))].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))),
         violations,
       },
       null,
