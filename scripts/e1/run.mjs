@@ -182,9 +182,13 @@ function analyse({ arm, parsed, transcriptText, diff }) {
     const text = sanitize(JSON.stringify(input));
     if (/~\/(?!\.claude\/projects\/.*e1-runs)|ddd-boundary-policing|\/Users\//.test(text)) outside.push(`${tool}: ${text.slice(0, 200)}`);
   }
-  const testsTouched = diff.files
-    .filter((f) => f.status !== 'A' && /(\.spec\.ts|\.e2e-spec\.ts|jest.*config|global-setup)/.test(f.path))
-    .map((f) => `${f.status} ${f.path}`);
+  // Adding cases to an existing spec is normal; flag deleted files, test config changes and removed assertions.
+  const testsTouched = [];
+  for (const f of diff.files.filter((x) => x.status !== 'A' && /(\.spec\.ts|\.e2e-spec\.ts|jest.*config|global-setup)/.test(x.path))) {
+    const block = diff.patch.split(/^diff --git /m).find((b) => b.startsWith(`a/${f.path} `)) ?? '';
+    const removed = block.split('\n').filter((l) => /^-(?!--)/.test(l) && /\b(it|test|describe)\(|expect\(/.test(l)).length;
+    if (f.status === 'D' || !/\.spec\.ts$|\.e2e-spec\.ts$/.test(f.path) || removed > 0) testsTouched.push(`${f.status} ${f.path}${removed ? ` (${removed} assertion/test line(s) removed)` : ''}`);
+  }
   return { gateRunsByAgent, leakHits: leakHits.slice(0, 20), outsideAccess: outside.slice(0, 20), testsTouched };
 }
 

@@ -157,7 +157,7 @@ const int = (v) => (v === null || v === undefined ? '—' : Math.round(v).toLoca
 // ---------- ground truth ----------
 function loadGroundTruth() {
   const labelsFile = join(E1, 'blind/labels.csv');
-  const mappingFile = join(E1, 'blind/mapping.json');
+  const mappingFile = join(E1, 'blind-mapping.json');
   if (!existsSync(labelsFile) || !existsSync(mappingFile)) return null;
   const mapping = readJson(mappingFile, {});
   const byRun = {};

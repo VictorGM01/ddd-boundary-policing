@@ -1,0 +1,174 @@
+{
+  "runId": "T4-A-r1",
+  "plan": "pilot",
+  "task": "T4",
+  "arm": "A",
+  "rep": 1,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 20,
+      "outputTokens": 8819,
+      "cacheReadInputTokens": 228941,
+      "cacheCreationInputTokens": 32683,
+      "webSearchRequests": 0,
+      "costUSD": 0.26475020000000005,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1895,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": null
+  },
+  "startedAt": "2026-11-12T22:35:37.153Z",
+  "finishedAt": "2026-11-12T22:37:22.042Z",
+  "wallMs": 87843,
+  "durationMs": 80487,
+  "durationApiMs": 60503,
+  "numTurns": 11,
+  "tokens": {
+    "input": 20,
+    "output": 8819,
+    "cacheRead": 228941,
+    "cacheCreation": 32683
+  },
+  "costUsd": 0.26475020000000005,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "Check-in is now refused with a 422 and `OverdueBalanceError` when the visitor has an open invoice older than 30 days. `npm test` passes (33 unit tests and 6 e2e tests), and typecheck and lint are clean. Nothing is committed.\n\n**How it works**\n- **Cross-context check:** front desk asks billing through a new `OverdueBalanceQuery` contract in `src/contracts/billing.queries.ts`. The two contexts still don't import each other.\n- **Billing side:** `BillingModule` provides the contract and is now `@Global()` so front desk can resolve it. `BillingOverdueBalanceQuery` in `billing/api/` implements it via `InvoicingService.hasOverdueBalance`.\n- **The rule:** `Invoice.isOverdue(now)` is true when the invoice is open and was issued more than 30 days ago. Exactly 30 days is not overdue.\n- **Front desk side:** `VisitsService.checkIn` throws `OverdueBalanceError` when billing reports an overdue balance. The existing `DomainErrorFilter` turns that into the 422.\n- **Error ordering:** the visit's own state is validated first, so a cancelled or already-checked-in visit still gets its usual error. When the check-in is refused, nothing is saved and no `VisitorCheckedIn` event is published.\n\n**Tests added**\n- `invoice.spec.ts`: boundary cases for the overdue rule.\n- `invoicing.service.spec.ts`: `hasOverdueBalance`, including a different payer.\n- `visits.service.spec.ts` (new): check-in succeeds with no overdue balance. It is refused, with nothing persisted or published, when there is one.\n- `clinic-flow.e2e-spec.ts`: a no-show fee older than 30 days gives a 422 `OverdueBalanceError` and leaves the queue empty. A 10-day-old fee still allows check-in.\n\nInvoices only have an `OPEN` status today, so every issued invoice counts as open. Once payments exist, `isOverdue` will exclude paid ones.",
+  "initialCommit": "52cb816010b5149a5107a6fe8234c9de00410266",
+  "filesChanged": [
+    {
+      "status": "A",
+      "path": "src/contracts/billing.queries.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/billing/api/overdue-balance.query.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/billing.module.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/application/visits.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/application/visits.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/domain/visit.errors.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": null,
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": false,
+    "gateViolations": 9,
+    "rulesFired": [
+      "R2",
+      "R9"
+    ],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 0,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": [
+    "M src/modules/billing/application/invoicing.service.spec.ts",
+    "M src/modules/billing/domain/invoice.spec.ts",
+    "M test/clinic-flow.e2e-spec.ts"
+  ]
+}

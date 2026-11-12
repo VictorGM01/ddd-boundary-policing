@@ -1,0 +1,102 @@
+{
+  "plan": "pilot",
+  "seed": 20261112,
+  "spec": {
+    "tasks": [
+      "T1",
+      "T4"
+    ],
+    "arms": [
+      "A",
+      "B"
+    ],
+    "reps": 1,
+    "seed": 20261112
+  },
+  "createdAt": "2026-11-12T22:35:29.795Z",
+  "startedAt": "2026-11-12T22:35:29.796Z",
+  "finishedAt": "2026-11-12T22:39:15.770Z",
+  "pauses": [],
+  "runs": {
+    "T1-A-r1": {
+      "runId": "T1-A-r1",
+      "task": "T1",
+      "arm": "A",
+      "rep": 1,
+      "order": 0,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:37:05.825Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:35:29.796Z",
+      "finishedAt": "2026-11-12T22:37:05.825Z",
+      "costUsd": 0.23886539999999998
+    },
+    "T4-A-r1": {
+      "runId": "T4-A-r1",
+      "task": "T4",
+      "arm": "A",
+      "rep": 1,
+      "order": 1,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:37:24.705Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:35:37.152Z",
+      "finishedAt": "2026-11-12T22:37:24.705Z",
+      "costUsd": 0.26475020000000005
+    },
+    "T1-B-r1": {
+      "runId": "T1-B-r1",
+      "task": "T1",
+      "arm": "B",
+      "rep": 1,
+      "order": 2,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:38:37.917Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:37:05.827Z",
+      "finishedAt": "2026-11-12T22:38:37.917Z",
+      "costUsd": 0.2643128
+    },
+    "T4-B-r1": {
+      "runId": "T4-B-r1",
+      "task": "T4",
+      "arm": "B",
+      "rep": 1,
+      "order": 3,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:39:15.770Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:37:24.705Z",
+      "finishedAt": "2026-11-12T22:39:15.770Z",
+      "costUsd": 0.2869238
+    }
+  }
+}

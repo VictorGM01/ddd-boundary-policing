@@ -1,0 +1,52 @@
+
+> ddd-boundary-policing@0.1.0 e1
+> node scripts/e1/run.mjs --pilot
+
+plan "pilot": 4 runs, 4 to go, concurrency 2
+[worker 1] starting T1-A-r1 (attempt 1)
+[T1-A-r1] copy ready, agent starting (arm A)
+[worker 2] starting T4-A-r1 (attempt 1)
+[T4-A-r1] copy ready, agent starting (arm A)
+[T1-A-r1] agent finished (success, 9 turns, $0.24); evaluating
+[T1-A-r1] done: acceptance 3/3, npm test pass, gate pass
+[worker 1] starting T1-B-r1 (attempt 1)
+[T1-B-r1] copy ready, agent starting (arm B)
+[T4-A-r1] agent finished (success, 11 turns, $0.26); evaluating
+[T4-A-r1] done: acceptance 3/3, npm test pass, gate 9 violation(s) R2,R9
+[worker 2] starting T4-B-r1 (attempt 1)
+[T4-B-r1] copy ready, agent starting (arm B)
+[T1-B-r1] agent finished (success, 8 turns, $0.26); evaluating
+[T1-B-r1] done: acceptance 3/3, npm test pass, gate pass
+[T4-B-r1] agent finished (success, 10 turns, $0.29); evaluating
+[T4-B-r1] done: acceptance 3/3, npm test pass, gate pass
+plan "pilot" finished
+COMPLETO: 4 de 4 execuções concluídas.
+
+## ⚠️ Pontos de atenção para o aluno
+
+- Preflight (experiments/e1/preflight.md): o Mac estava **na bateria** (cerca de 45%) quando o experimento foi montado. O `caffeinate -s` não impede o repouso na bateria; se a bateria acabar, o plano para no meio e retoma do ponto em que parou quando for executado de novo (`npm run e1 -- --plan`). A ordem em blocos de replicação (ADR-021) garante repetições completas de todas as células mesmo assim.
+- Preflight: disco com cerca de **4 GiB livres (98% usado)**. As cópias usam clone APFS e são apagadas a cada execução, mas um disco cheio derrubaria execuções (aparecem como `failed`).
+- Sem container: o agente rodou com as permissões do usuário no Mac (ADR-018). O harness procura caminhos fora da cópia nas chamadas de ferramenta; ocorrências aparecem nesta lista, por execução.
+- Testes de aceite parciais em T2 (preço de prescrição não verificável) e T4 (fatura paga não verificável); T3 e T6 aceitam formatos variados (ADR-020).
+- Decisões tomadas sem o aluno: estão nos ADR-016 a ADR-022 (e seguintes) de docs/decisoes.md.
+- T1-A-r1: o agente alterou testes ou configuração de teste existentes: M src/modules/billing/application/invoicing.service.spec.ts, M src/modules/billing/domain/invoice.spec.ts, M src/modules/scheduling/application/appointments.service.spec.ts, M src/modules/scheduling/domain/appointment.spec.ts, M test/clinic-flow.e2e-spec.ts.
+- T4-A-r1: o agente alterou testes ou configuração de teste existentes: M src/modules/billing/application/invoicing.service.spec.ts, M src/modules/billing/domain/invoice.spec.ts, M test/clinic-flow.e2e-spec.ts.
+- T1-B-r1: o agente alterou testes ou configuração de teste existentes: M src/modules/billing/application/invoicing.service.spec.ts, M src/modules/billing/domain/invoice.spec.ts, M src/modules/scheduling/application/appointments.service.spec.ts, M src/modules/scheduling/domain/appointment.spec.ts, M test/clinic-flow.e2e-spec.ts.
+- T4-B-r1: o agente alterou testes ou configuração de teste existentes: M src/modules/billing/application/invoicing.service.spec.ts, M test/clinic-flow.e2e-spec.ts.
+- T4-B-r1: relation declared by agent: billing → front-desk; published contract declared by agent: billing publishes billing.events.ts.
+
+## Status (plano "pilot", semente 20261112)
+
+- Início: 2026-11-12T22:35:29.796Z · fim: 2026-11-12T22:39:15.770Z
+- Custo equivalente estimado (preço de API; a execução usou assinatura): $1.05
+- Pausas por limite de uso: 0
+
+| Execução | Status | Aceite | `npm test` | Gate (violações) | Turnos | Custo eq. | Duração |
+|---|---|---|---|---|---|---|---|
+| T1-A-r1 | done | 3/3 | sim | 0 | 9 | $0.24 | 1 min |
+| T4-A-r1 | done | 3/3 | sim | 9 (R2, R9) | 11 | $0.26 | 1 min |
+| T1-B-r1 | done | 3/3 | sim | 0 | 8 | $0.26 | 1 min |
+| T4-B-r1 | done | 3/3 | sim | 0 | 10 | $0.29 | 2 min |
+
+Gerado por `npm run e1 -- --finish`. Resultados agregados em `experiments/e1/results/`.
+
