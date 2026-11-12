@@ -147,3 +147,10 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# local SQLite databases
+prisma/*.db
+prisma/*.db-journal
+
+# seeded evaluation scratch
+experiments/seeded/.work/
