@@ -1,0 +1,183 @@
+{
+  "runId": "T4-B-r1",
+  "plan": "main",
+  "task": "T4",
+  "arm": "B",
+  "rep": 1,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 22,
+      "outputTokens": 12824,
+      "cacheReadInputTokens": 325619,
+      "cacheCreationInputTokens": 38918,
+      "webSearchRequests": 0,
+      "costUSD": 0.3490798,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 3135,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": "CLAUDE.md"
+  },
+  "startedAt": "2026-11-12T22:48:26.423Z",
+  "finishedAt": "2026-11-12T22:50:34.052Z",
+  "wallMs": 110977,
+  "durationMs": 109889,
+  "durationApiMs": 86094,
+  "numTurns": 11,
+  "tokens": {
+    "input": 22,
+    "output": 12824,
+    "cacheRead": 325619,
+    "cacheCreation": 38918
+  },
+  "costUsd": 0.3490798,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "Check-in is now refused with a 422 and `error: \"OverdueBalanceError\"` when the visitor has an invoice issued more than 30 days ago. `npm test` passes (34 unit tests, 6 e2e), and typecheck and lint are clean.\n\n## New context relation: `billing → front-desk`\nFront-desk can't ask billing about invoices, because the rules forbid cross-context imports and synchronous calls. And `billing → front-desk` wasn't in the context map. So I added it, as CLAUDE.md requires:\n- **`context-map.json`** is new at the repo root. It encodes the existing map and adds `billing` to front-desk's `upstream`.\n- **`src/contracts/billing.events.ts`** defines `BillingEvents.InvoiceIssued` with `{ invoiceId, personId, issuedAt }`, plus the event envelope. It carries no amounts, lines or status.\n- **Billing** (`InvoicingService`) now publishes `InvoiceIssued` with `emitAsync` after saving an invoice.\n- **Front-desk** keeps its own copy in a new `FrontDeskVisitorInvoice` table, filled by `BillingEventsListener`. The write is idempotent per `invoiceId`.\n\n## The check-in rule\n- `VisitsService.checkIn` throws `OverdueBalanceError` if the visitor has an invoice issued before `now - 30 days`. A invoice issued exactly 30 days ago is still allowed.\n- Existing visit errors (already checked in, cancelled) take precedence. When the check fails, nothing is saved and no `VisitorCheckedIn` event goes out.\n- The existing `DomainErrorFilter` already maps domain errors to 422, so no HTTP changes were needed.\n\n## Tests\n- **Billing unit spec:** `InvoiceIssued` is published with the expected payload, and not published on a duplicate source.\n- **New front-desk `visits.service.spec.ts`:** covers the 30-day boundary, other visitors' invoices, error precedence, and that a refused check-in leaves the visit unchanged.\n- **E2E:** a no-show invoice goes through billing and the event to front-desk. A check-in after 30 days gets 422, and one at exactly 30 days gets 200.\n\n## Things to know\n- **Invoices issued before this deploys:** front-desk only learns about invoices from events, so older ones aren't known to it. They need a one-off backfill, which I didn't write.\n- **Settling invoices:** every invoice is `OPEN` today and billing has no payment flow. When one exists, billing will need to publish a settled event so front-desk can drop the invoice from its copy. Otherwise the block never lifts.\n- **Event cycle:** the event flow is now `front-desk → clinical → billing → front-desk`. The import graph stays acyclic because each context only imports contract files. If R12 should also apply to the event graph, this relation conflicts with it.\n- **Schema:** I changed `prisma/schema.prisma`, so deployed databases need `npm run db:push`. The e2e setup does this itself.\n\nI didn't touch CLAUDE.md's context-map section. You may want it to list the new relation.",
+  "initialCommit": "c68a2922fc31fbd1ff31525b9d71870d0289c0ea",
+  "filesChanged": [
+    {
+      "status": "A",
+      "path": "context-map.json"
+    },
+    {
+      "status": "M",
+      "path": "prisma/schema.prisma"
+    },
+    {
+      "status": "A",
+      "path": "src/contracts/billing.events.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/api/billing-events.listener.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/application/visits.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/application/visits.service.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/domain/overdue-balance.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/domain/visit.errors.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/domain/visitor-balance.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/front-desk.module.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/infrastructure/prisma-visitor-balance.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [
+    "relation declared by agent: billing → front-desk",
+    "published contract declared by agent: billing publishes billing.events.ts"
+  ],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling",
+          "billing"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": "billing.events.ts",
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": true,
+    "gateViolations": 0,
+    "rulesFired": [],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 0,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": []
+}

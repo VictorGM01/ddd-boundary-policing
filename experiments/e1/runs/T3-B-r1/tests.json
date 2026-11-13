@@ -1,0 +1,22 @@
+{
+  "passed": true,
+  "exitCode": 0,
+  "timedOut": false,
+  "ms": 4253,
+  "suites": [
+    {
+      "failed": 0,
+      "passed": 30,
+      "total": 30
+    },
+    {
+      "failed": 0,
+      "passed": 11,
+      "total": 11
+    }
+  ],
+  "typecheckPassed": true,
+  "typecheckTail": "",
+  "prismaGenerateExit": 0,
+  "outputTail": "\n> ddd-boundary-policing@0.1.0 test\n> npm run test:unit && npm run test:e2e\n\n\n> ddd-boundary-policing@0.1.0 test:unit\n> jest --config jest.config.ts\n\n\n> ddd-boundary-policing@0.1.0 test:e2e\n> jest --config test/jest-e2e.config.ts --runInBand\n\nPASS src/modules/billing/domain/invoice.spec.ts\nPASS src/modules/clinical/domain/encounter.spec.ts\nPASS src/modules/front-desk/domain/visit.spec.ts\nPASS src/modules/scheduling/domain/appointment.spec.ts\nPASS src/modules/billing/application/invoicing.service.spec.ts\nPASS src/modules/scheduling/application/appointments.service.spec.ts\n\nTest Suites: 6 passed, 6 total\nTests:       30 passed, 30 total\nSnapshots:   0 total\nTime:        1.704 s, estimated 2 s\nRan all test suites.\nPASS test/clinic-flow.e2e-spec.ts\n  Clinic flow across the four bounded contexts (e2e)\n    ✓ schedule → check-in → complete encounter → invoice issued, only through events (40 ms)\n    ✓ cancelling an appointment prevents the check-in at the front desk (10 ms)\n    ✓ a no-show in scheduling becomes a no-show fee invoice in billing (7 ms)\n    ✓ rejects double booking of the same practitioner slot (4 ms)\n    GET /reports/no-shows\n      ✓ reports no-show counts and fees charged per practitioner within the period (21 ms)\n      ✓ includes the whole last day when \"to\" is a plain date (8 ms)\n      ✓ returns an empty list when there are no no-shows in the period (2 ms)\n      ✓ rejects missing from with 400 (1 ms)\n      ✓ rejects missing to with 400 (1 ms)\n      ✓ rejects invalid date with 400 (1 ms)\n      ✓ rejects from after to with 400 (1 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       11 passed, 11 total\nSnapshots:   0 total\nTime:        0.693 s, estimated 2 s\nRan all test suites.\n"
+}

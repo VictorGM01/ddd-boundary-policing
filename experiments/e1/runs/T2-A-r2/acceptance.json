@@ -1,0 +1,21 @@
+{
+  "task": "T2",
+  "passed": false,
+  "numPassed": 1,
+  "numTotal": 2,
+  "exitCode": 1,
+  "timedOut": false,
+  "tests": [
+    {
+      "title": "accepts a prescription during an encounter",
+      "status": "passed",
+      "failure": ""
+    },
+    {
+      "title": "a prescription without a price does not prevent the other invoice lines",
+      "status": "failed",
+      "failure": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 404\n    at encounterInvoice (/private/var/folders/kf/qtv1d4_s1t1344mt969pf3140000gn/T/e1-runs/main-T2-A-r2-mwe5biul/e1-acceptance/support.ts:109:22)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at Object.<anonymous> (/private/var/folders/kf/qtv1d4_s1t1344mt969pf3140000gn/T/e1-runs/main-T2-A-r2-mwe5biul/e1-acceptance/T2.e2e-spec.ts:30:21)"
+    }
+  ],
+  "suiteError": "  ● T2 · prescriptions generate billable items (acceptance) › a prescription without a price does not prevent the other invoice lines\n\n    expect(received).toBe(expected) // Object.is equality\n\n    Expected: 200\n    Received: 404\n\n    \u001b[0m \u001b[90m 107 |\u001b[39m \u001b[36mexport\u001b[39m \u001b[36masync\u001b[39m \u001b[36mfunction\u001b[39m encounterInvoice(ctx\u001b[33m:\u001b[39m \u001b[33mCtx\u001b[39m\u001b[33m,\u001b[39m encounterId\u001b[33m:\u001b[39m string)\u001b[33m:\u001b[39m \u001b[33mPromise\u001b[39m\u001b[33m<\u001b[39m\u001b[33mInvoiceView\u001b[39m\u001b[33m>\u001b[39m {\n     \u001b[90m 108 |\u001b[39m   \u001b[36mconst\u001b[39m res \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m ctx\u001b[33m.\u001b[39mhttp()\u001b[33m.\u001b[39m\u001b[36mget\u001b[39m(\u001b[32m'/billing/invoices'\u001b[39m)\u001b[33m.\u001b[39mquery({ sourceType\u001b[33m:\u001b[39m \u001b[32m'ENCOUNTER'\u001b[39m\u001b[33m,\u001b[39m sourceId\u001b[33m:\u001b[39m encounterId })\u001b[33m;\u001b[39m\n    \u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 109 |\u001b[39m   expect(res\u001b[33m.\u001b[39mstatus)\u001b[33m.\u001b[39mtoBe(\u001b[35m200\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m     |\u001b[39m                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 110 |\u001b[39m   \u001b[36mreturn\u001b[39m (res\u001b[33m.\u001b[39mbody \u001b[36mas\u001b[39m \u001b[33mInvoiceView\u001b[39m[])[\u001b[35m0\u001b[39m]\u001b[33m;\u001b[39m\n     \u001b[90m 111 |\u001b[39m }\n     \u001b[90m 112 |\u001b[39m\u001b[0m\n\n      at encounterInvoice (e1-acceptance/support.ts:109:22)\n      at Object.<anonymous> (e1-acceptance/T2.e2e-spec.ts:30:21)\n"
+}

@@ -1,0 +1,183 @@
+{
+  "runId": "T4-C-r2",
+  "plan": "main",
+  "task": "T4",
+  "arm": "C",
+  "rep": 2,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 14,
+      "outputTokens": 10063,
+      "cacheReadInputTokens": 185669,
+      "cacheCreationInputTokens": 38706,
+      "webSearchRequests": 0,
+      "costUSD": 0.2926158,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1995,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": "CLAUDE.md"
+  },
+  "startedAt": "2026-11-13T11:58:46.786Z",
+  "finishedAt": "2026-11-13T12:00:24.010Z",
+  "wallMs": 79734,
+  "durationMs": 78851,
+  "durationApiMs": 62443,
+  "numTurns": 8,
+  "tokens": {
+    "input": 14,
+    "output": 10063,
+    "cacheRead": 185669,
+    "cacheCreation": 38706
+  },
+  "costUsd": 0.2926158,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "Check-in is now refused with a 422 `OverdueBalanceError` when the visitor has an open invoice issued more than 30 days ago. `npm test` passes (34 unit tests, 5 e2e), and `npm run check:arch`, lint and typecheck are clean.\n\n**This adds a new relation to the context map.** Front-desk can't call billing (R9, R10) and has no relation to it, so I added `billing → front-desk` to `context-map.json`. Billing now publishes `InvoiceIssued` in a new `src/contracts/billing.events.ts` (`invoiceId`, `personId`, `issuedAt` only). Front-desk keeps its own copy of that data in a new `FrontDeskOpenInvoice` Prisma model.\n\nThe map now has a loop: front-desk → clinical → billing → front-desk. There is no file-level cycle, so R12 and `check:arch` pass, but you may want to look at it.\n\n**How it behaves:**\n- **Billing:** `InvoicingService` publishes `InvoiceIssued` after saving each invoice, for both encounter invoices and no-show fees.\n- **Front-desk:** a new `BillingEventsListener` stores each invoice, and recording the same invoice twice is harmless.\n- **The check:** `VisitsService.checkIn` throws `OverdueBalanceError` before saving or publishing `VisitorCheckedIn`. \"Older than 30 days\" means issued strictly before `now − 30 days`, so an invoice exactly 30 days old passes.\n- **Order of errors:** a cancelled or already-checked-in visit still gets its existing error first.\n\n**Tests added:**\n- A new `visits.service.spec.ts` covers:\n  - refusal, with the visit left unchanged and no event published;\n  - the exact 30-day boundary;\n  - other people's invoices being ignored;\n  - duplicate events.\n- `invoicing.service.spec.ts` now checks the `InvoiceIssued` payload.\n- `test/clinic-flow.e2e-spec.ts` has a full no-show → overdue → 422 flow.\n\n**Limits:**\n- **No way to clear an invoice:** billing only has `OPEN` invoices today, so a visitor stays blocked until a payment feature exists. That would need its own event, such as an `InvoicePaid` event, so front-desk can remove its copy.\n- **No backfill:** invoices issued before this change aren't in front-desk's copy.\n- **Schema change:** run `npm run db:push` on real databases to create the new table.",
+  "initialCommit": "bd86acbb94c8d26c8babc440f6e8334d39c354c8",
+  "filesChanged": [
+    {
+      "status": "M",
+      "path": "context-map.json"
+    },
+    {
+      "status": "M",
+      "path": "prisma/schema.prisma"
+    },
+    {
+      "status": "A",
+      "path": "src/contracts/billing.events.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/api/billing-events.listener.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/application/visits.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/application/visits.service.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/domain/open-invoice.repository.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/domain/overdue-balance.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/domain/visit.errors.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/front-desk.module.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/infrastructure/prisma-open-invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [
+    "relation declared by agent: billing → front-desk",
+    "published contract declared by agent: billing publishes billing.events.ts"
+  ],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling",
+          "billing"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": "billing.events.ts",
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": true,
+    "gateViolations": 0,
+    "rulesFired": [],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 3,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": []
+}

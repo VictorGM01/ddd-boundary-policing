@@ -1,0 +1,101 @@
+{
+  "passed": false,
+  "durationMs": 679,
+  "dependencyCruiserMs": 679,
+  "eslintMs": 538,
+  "rulesFired": [
+    "R1",
+    "R2",
+    "R9"
+  ],
+  "violations": [
+    {
+      "rule": "R1",
+      "tool": "dependency-cruiser",
+      "check": "R1-no-cross-context-import",
+      "file": "src/modules/front-desk/front-desk.module.ts",
+      "line": null,
+      "detail": "→ src/modules/billing/billing.module.ts"
+    },
+    {
+      "rule": "R1",
+      "tool": "eslint",
+      "check": "boundaries/dependencies",
+      "file": "src/modules/front-desk/front-desk.module.ts",
+      "line": 2,
+      "detail": "[R1] A bounded context must not import code from another bounded context; integrate through events."
+    },
+    {
+      "rule": "R2",
+      "tool": "dependency-cruiser",
+      "check": "R2-contracts-only-from-upstream:billing",
+      "file": "src/modules/billing/application/invoicing.service.ts",
+      "line": null,
+      "detail": "→ src/contracts/billing.queries.ts"
+    },
+    {
+      "rule": "R2",
+      "tool": "eslint",
+      "check": "no-restricted-imports",
+      "file": "src/modules/billing/application/invoicing.service.ts",
+      "line": 2,
+      "detail": "'@/contracts/billing.queries' import is restricted from being used by a pattern. [R2] billing may only depend on the published language of itself and its upstream contexts."
+    },
+    {
+      "rule": "R2",
+      "tool": "dependency-cruiser",
+      "check": "R2-contracts-only-from-upstream:billing",
+      "file": "src/modules/billing/billing.module.ts",
+      "line": null,
+      "detail": "→ src/contracts/billing.queries.ts"
+    },
+    {
+      "rule": "R2",
+      "tool": "eslint",
+      "check": "no-restricted-imports",
+      "file": "src/modules/billing/billing.module.ts",
+      "line": 2,
+      "detail": "'@/contracts/billing.queries' import is restricted from being used by a pattern. [R2] billing may only depend on the published language of itself and its upstream contexts."
+    },
+    {
+      "rule": "R2",
+      "tool": "dependency-cruiser",
+      "check": "R2-contracts-only-from-upstream:front-desk",
+      "file": "src/modules/front-desk/application/visits.service.spec.ts",
+      "line": null,
+      "detail": "→ src/contracts/billing.queries.ts"
+    },
+    {
+      "rule": "R2",
+      "tool": "eslint",
+      "check": "no-restricted-imports",
+      "file": "src/modules/front-desk/application/visits.service.spec.ts",
+      "line": 2,
+      "detail": "'@/contracts/billing.queries' import is restricted from being used by a pattern. [R2] front-desk may only depend on the published language of itself and its upstream contexts."
+    },
+    {
+      "rule": "R2",
+      "tool": "dependency-cruiser",
+      "check": "R2-contracts-only-from-upstream:front-desk",
+      "file": "src/modules/front-desk/application/visits.service.ts",
+      "line": null,
+      "detail": "→ src/contracts/billing.queries.ts"
+    },
+    {
+      "rule": "R2",
+      "tool": "eslint",
+      "check": "no-restricted-imports",
+      "file": "src/modules/front-desk/application/visits.service.ts",
+      "line": 3,
+      "detail": "'@/contracts/billing.queries' import is restricted from being used by a pattern. [R2] front-desk may only depend on the published language of itself and its upstream contexts."
+    },
+    {
+      "rule": "R9",
+      "tool": "eslint",
+      "check": "no-restricted-syntax",
+      "file": "src/modules/billing/billing.module.ts",
+      "line": 21,
+      "detail": "[R9] Bounded context modules must not export providers."
+    }
+  ]
+}

@@ -1,0 +1,481 @@
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 651a929..39d4a8b 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -8,16 +8,16 @@ datasource db {
+ }
+ 
+ model SchedulingAppointment {
+-  id               String   @id
+-  practitionerId   String
+-  requesterId      String
+-  requesterName    String
+-  requesterPhone   String
+-  startsAt         DateTime
+-  endsAt           DateTime
+-  status           String
+-  cancelReason     String?
+-  createdAt        DateTime @default(now())
++  id             String   @id
++  practitionerId String
++  requesterId    String
++  requesterName  String
++  requesterPhone String
++  startsAt       DateTime
++  endsAt         DateTime
++  status         String
++  cancelReason   String?
++  createdAt      DateTime @default(now())
+ 
+   @@index([practitionerId, startsAt])
+ }
+@@ -47,16 +47,20 @@ model ClinicalEncounter {
+ }
+ 
+ model BillingInvoice {
+-  id         String               @id
+-  payerId    String
+-  sourceType String
+-  sourceId   String
+-  status     String
+-  totalCents Int
+-  issuedAt   DateTime
+-  lines      BillingInvoiceLine[]
++  id             String               @id
++  payerId        String
++  sourceType     String
++  sourceId       String
++  status         String
++  totalCents     Int
++  issuedAt       DateTime
++  // Billing's own copy of who the no-show was booked with and when, for reporting. Null for encounter invoices.
++  practitionerId String?
++  occurredAt     DateTime?
++  lines          BillingInvoiceLine[]
+ 
+   @@unique([sourceType, sourceId])
++  @@index([sourceType, occurredAt])
+ }
+ 
+ model BillingInvoiceLine {
+diff --git a/src/contracts/scheduling.events.ts b/src/contracts/scheduling.events.ts
+index 8dbd6f2..60c3602 100644
+--- a/src/contracts/scheduling.events.ts
++++ b/src/contracts/scheduling.events.ts
+@@ -23,5 +23,6 @@ export interface AppointmentCancelled extends IntegrationEvent {
+ export interface AppointmentNoShow extends IntegrationEvent {
+   appointmentId: string;
+   personId: PersonId;
++  practitionerId: PractitionerId;
+   startsAt: string;
+ }
+diff --git a/src/modules/billing/api/no-show-report.controller.ts b/src/modules/billing/api/no-show-report.controller.ts
+new file mode 100644
+index 0000000..cbd40dc
+--- /dev/null
++++ b/src/modules/billing/api/no-show-report.controller.ts
+@@ -0,0 +1,29 @@
++import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
++import { InvoicingService } from '../application/invoicing.service';
++
++@Controller('reports')
++export class NoShowReportController {
++  constructor(private readonly invoicing: InvoicingService) {}
++
++  /** Period is half-open: `from` inclusive, `to` exclusive, both ISO-8601 dates or date-times. */
++  @Get('no-shows')
++  async noShows(@Query('from') from?: string, @Query('to') to?: string) {
++    const report = await this.invoicing.noShowReport(parseDate('from', from), parseDate('to', to));
++    return report.map((row) => ({
++      practitionerId: row.practitionerId,
++      noShows: row.noShows,
++      totalFeesCents: row.feesCents,
++    }));
++  }
++}
++
++function parseDate(name: string, value?: string): Date {
++  if (!value) {
++    throw new BadRequestException(`${name} is required`);
++  }
++  const date = new Date(value);
++  if (Number.isNaN(date.getTime())) {
++    throw new BadRequestException(`${name} must be an ISO-8601 date`);
++  }
++  return date;
++}
+diff --git a/src/modules/billing/api/scheduling-events.listener.ts b/src/modules/billing/api/scheduling-events.listener.ts
+index 21e72b2..0d1861f 100644
+--- a/src/modules/billing/api/scheduling-events.listener.ts
++++ b/src/modules/billing/api/scheduling-events.listener.ts
+@@ -9,6 +9,11 @@ export class SchedulingEventsListener {
+ 
+   @OnEvent(SchedulingEvents.AppointmentNoShow)
+   async onAppointmentNoShow(event: AppointmentNoShow): Promise<void> {
+-    await this.invoicing.chargeNoShow({ appointmentId: event.appointmentId, payerId: event.personId });
++    await this.invoicing.chargeNoShow({
++      appointmentId: event.appointmentId,
++      payerId: event.personId,
++      practitionerId: event.practitionerId,
++      missedAt: new Date(event.startsAt),
++    });
+   }
+ }
+diff --git a/src/modules/billing/application/invoicing.service.spec.ts b/src/modules/billing/application/invoicing.service.spec.ts
+index fd8115e..feb7c38 100644
+--- a/src/modules/billing/application/invoicing.service.spec.ts
++++ b/src/modules/billing/application/invoicing.service.spec.ts
+@@ -1,7 +1,7 @@
+ import { FixedClock } from '@/shared-kernel';
+ import { Invoice, InvoiceSource } from '../domain/invoice';
+-import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+-import { InvoiceRepository } from '../domain/invoice.repository';
++import { InvalidReportPeriodError, SourceAlreadyInvoicedError } from '../domain/invoice.errors';
++import { InvoiceRepository, NoShowSummary } from '../domain/invoice.repository';
+ import { PriceList } from '../domain/price-list';
+ import { InvoicingService } from './invoicing.service';
+ 
+@@ -25,11 +25,36 @@ class InMemoryInvoiceRepository extends InvoiceRepository {
+     );
+   }
+ 
++  async summarizeNoShows(from: Date, to: Date) {
++    const byPractitioner = new Map<string, NoShowSummary>();
++    for (const invoice of this.items) {
++      const { source, noShow } = invoice.toSnapshot();
++      if (source.type !== 'NO_SHOW' || !noShow) continue;
++      if (noShow.missedAt < from || noShow.missedAt >= to) continue;
++      const row = byPractitioner.get(noShow.practitionerId) ?? {
++        practitionerId: noShow.practitionerId,
++        noShows: 0,
++        feesCents: 0,
++      };
++      row.noShows += 1;
++      row.feesCents += invoice.totalCents;
++      byPractitioner.set(noShow.practitionerId, row);
++    }
++    return [...byPractitioner.values()];
++  }
++
+   async save(invoice: Invoice) {
+     this.items.push(invoice);
+   }
+ }
+ 
++const noShow = (appointmentId: string, practitionerId = 'dr-house', missedAt = '2026-03-02T10:00:00Z') => ({
++  appointmentId,
++  payerId: 'person-1',
++  practitionerId,
++  missedAt: new Date(missedAt),
++});
++
+ describe('InvoicingService', () => {
+   let repository: InMemoryInvoiceRepository;
+   let service: InvoicingService;
+@@ -59,11 +84,44 @@ describe('InvoicingService', () => {
+   });
+ 
+   it('charges the no-show fee once per appointment', async () => {
+-    await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' });
++    await service.chargeNoShow(noShow('appt-1'));
+ 
+-    await expect(service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' })).rejects.toThrow(
++    await expect(service.chargeNoShow(noShow('appt-1'))).rejects.toThrow(
+       SourceAlreadyInvoicedError,
+     );
+     expect(repository.items[0].totalCents).toBe(10_000);
+   });
++
++  describe('noShowReport', () => {
++    const march = [new Date('2026-03-01T00:00:00Z'), new Date('2026-04-01T00:00:00Z')] as const;
++
++    it('counts no-shows and sums fees per practitioner within the period', async () => {
++      await service.chargeNoShow(noShow('a-1', 'dr-house'));
++      await service.chargeNoShow(noShow('a-2', 'dr-house', '2026-03-10T10:00:00Z'));
++      await service.chargeNoShow(noShow('a-3', 'dr-wilson'));
++
++      const report = await service.noShowReport(...march);
++
++      expect(report).toEqual(
++        expect.arrayContaining([
++          { practitionerId: 'dr-house', noShows: 2, feesCents: 20_000 },
++          { practitionerId: 'dr-wilson', noShows: 1, feesCents: 10_000 },
++        ]),
++      );
++      expect(report).toHaveLength(2);
++    });
++
++    it('ignores no-shows outside the period and encounter invoices', async () => {
++      await service.chargeNoShow(noShow('a-1', 'dr-house', '2026-02-28T23:59:59Z'));
++      await service.chargeNoShow(noShow('a-2', 'dr-house', '2026-04-01T00:00:00Z'));
++      await service.invoiceEncounter({ encounterId: 'e-1', payerId: 'person-1', procedureCodes: ['10101012'] });
++
++      expect(await service.noShowReport(...march)).toEqual([]);
++    });
++
++    it('rejects a period that does not start before it ends', async () => {
++      await expect(service.noShowReport(march[1], march[0])).rejects.toThrow(InvalidReportPeriodError);
++      await expect(service.noShowReport(march[0], march[0])).rejects.toThrow(InvalidReportPeriodError);
++    });
++  });
+ });
+diff --git a/src/modules/billing/application/invoicing.service.ts b/src/modules/billing/application/invoicing.service.ts
+index 06680e2..d0870db 100644
+--- a/src/modules/billing/application/invoicing.service.ts
++++ b/src/modules/billing/application/invoicing.service.ts
+@@ -1,8 +1,8 @@
+ import { Injectable } from '@nestjs/common';
+ import { Clock, newId, PersonId } from '@/shared-kernel';
+-import { Invoice, InvoiceLine, InvoiceSource } from '../domain/invoice';
+-import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+-import { InvoiceRepository } from '../domain/invoice.repository';
++import { Invoice, InvoiceLine, InvoiceSource, NoShowDetails } from '../domain/invoice';
++import { InvalidReportPeriodError, SourceAlreadyInvoicedError } from '../domain/invoice.errors';
++import { InvoiceRepository, NoShowSummary } from '../domain/invoice.repository';
+ import { PriceList } from '../domain/price-list';
+ 
+ @Injectable()
+@@ -21,8 +21,23 @@ export class InvoicingService {
+     );
+   }
+ 
+-  async chargeNoShow(input: { appointmentId: string; payerId: PersonId }): Promise<Invoice> {
+-    return this.issue(input.payerId, { type: 'NO_SHOW', id: input.appointmentId }, [this.priceList.noShowFee()]);
++  async chargeNoShow(input: {
++    appointmentId: string;
++    payerId: PersonId;
++    practitionerId: string;
++    missedAt: Date;
++  }): Promise<Invoice> {
++    return this.issue(input.payerId, { type: 'NO_SHOW', id: input.appointmentId }, [this.priceList.noShowFee()], {
++      practitionerId: input.practitionerId,
++      missedAt: input.missedAt,
++    });
++  }
++
++  async noShowReport(from: Date, to: Date): Promise<NoShowSummary[]> {
++    if (from.getTime() >= to.getTime()) {
++      throw new InvalidReportPeriodError();
++    }
++    return this.invoices.summarizeNoShows(from, to);
+   }
+ 
+   async invoicesOf(payerId: PersonId): Promise<Invoice[]> {
+@@ -33,11 +48,16 @@ export class InvoicingService {
+     return this.invoices.findBySource(source);
+   }
+ 
+-  private async issue(payerId: PersonId, source: InvoiceSource, lines: InvoiceLine[]): Promise<Invoice> {
++  private async issue(
++    payerId: PersonId,
++    source: InvoiceSource,
++    lines: InvoiceLine[],
++    noShow?: NoShowDetails,
++  ): Promise<Invoice> {
+     if (await this.invoices.existsForSource(source)) {
+       throw new SourceAlreadyInvoicedError(source.type, source.id);
+     }
+-    const invoice = Invoice.issue({ id: newId(), payerId, source, lines, issuedAt: this.clock.now() });
++    const invoice = Invoice.issue({ id: newId(), payerId, source, lines, issuedAt: this.clock.now(), noShow });
+     await this.invoices.save(invoice);
+     return invoice;
+   }
+diff --git a/src/modules/billing/billing.module.ts b/src/modules/billing/billing.module.ts
+index 34c683b..7c3534e 100644
+--- a/src/modules/billing/billing.module.ts
++++ b/src/modules/billing/billing.module.ts
+@@ -1,6 +1,7 @@
+ import { Module } from '@nestjs/common';
+ import { ClinicalEventsListener } from './api/clinical-events.listener';
+ import { InvoicesController } from './api/invoices.controller';
++import { NoShowReportController } from './api/no-show-report.controller';
+ import { SchedulingEventsListener } from './api/scheduling-events.listener';
+ import { InvoicingService } from './application/invoicing.service';
+ import { InvoiceRepository } from './domain/invoice.repository';
+@@ -8,7 +9,7 @@ import { PriceList } from './domain/price-list';
+ import { PrismaInvoiceRepository } from './infrastructure/prisma-invoice.repository';
+ 
+ @Module({
+-  controllers: [InvoicesController],
++  controllers: [InvoicesController, NoShowReportController],
+   providers: [
+     InvoicingService,
+     ClinicalEventsListener,
+diff --git a/src/modules/billing/domain/invoice.errors.ts b/src/modules/billing/domain/invoice.errors.ts
+index 006c455..0c843f7 100644
+--- a/src/modules/billing/domain/invoice.errors.ts
++++ b/src/modules/billing/domain/invoice.errors.ts
+@@ -23,3 +23,9 @@ export class SourceAlreadyInvoicedError extends DomainError {
+     super(`${sourceType} ${sourceId} has already been invoiced`);
+   }
+ }
++
++export class InvalidReportPeriodError extends DomainError {
++  constructor() {
++    super('The report period must start before it ends');
++  }
++}
+diff --git a/src/modules/billing/domain/invoice.repository.ts b/src/modules/billing/domain/invoice.repository.ts
+index 47ca9b8..08dfa4f 100644
+--- a/src/modules/billing/domain/invoice.repository.ts
++++ b/src/modules/billing/domain/invoice.repository.ts
+@@ -1,8 +1,16 @@
+ import type { Invoice, InvoiceSource } from './invoice';
+ 
++export interface NoShowSummary {
++  practitionerId: string;
++  noShows: number;
++  feesCents: number;
++}
++
+ export abstract class InvoiceRepository {
+   abstract existsForSource(source: InvoiceSource): Promise<boolean>;
+   abstract findByPayer(payerId: string): Promise<Invoice[]>;
+   abstract findBySource(source: InvoiceSource): Promise<Invoice | null>;
++  /** No-show invoices whose missed appointment falls in [from, to), grouped by practitioner. */
++  abstract summarizeNoShows(from: Date, to: Date): Promise<NoShowSummary[]>;
+   abstract save(invoice: Invoice): Promise<void>;
+ }
+diff --git a/src/modules/billing/domain/invoice.ts b/src/modules/billing/domain/invoice.ts
+index 24a3676..c7874f0 100644
+--- a/src/modules/billing/domain/invoice.ts
++++ b/src/modules/billing/domain/invoice.ts
+@@ -22,6 +22,13 @@ export interface InvoiceSnapshot {
+   status: InvoiceStatus;
+   lines: InvoiceLine[];
+   issuedAt: Date;
++  /** Only for NO_SHOW invoices: the practitioner the missed appointment was with and when it was due. */
++  noShow?: NoShowDetails;
++}
++
++export interface NoShowDetails {
++  practitionerId: string;
++  missedAt: Date;
+ }
+ 
+ export interface IssueInvoiceInput {
+@@ -30,6 +37,7 @@ export interface IssueInvoiceInput {
+   source: InvoiceSource;
+   lines: InvoiceLine[];
+   issuedAt: Date;
++  noShow?: NoShowDetails;
+ }
+ 
+ export class Invoice {
+diff --git a/src/modules/billing/infrastructure/prisma-invoice.repository.ts b/src/modules/billing/infrastructure/prisma-invoice.repository.ts
+index 83cec31..5193cb3 100644
+--- a/src/modules/billing/infrastructure/prisma-invoice.repository.ts
++++ b/src/modules/billing/infrastructure/prisma-invoice.repository.ts
+@@ -3,7 +3,7 @@ import type { BillingInvoice, BillingInvoiceLine } from '@prisma/client';
+ import { newId } from '@/shared-kernel';
+ import { PrismaService } from '@/infrastructure/prisma/prisma.service';
+ import { Invoice, InvoiceSource, InvoiceSourceType, InvoiceStatus } from '../domain/invoice';
+-import { InvoiceRepository } from '../domain/invoice.repository';
++import { InvoiceRepository, NoShowSummary } from '../domain/invoice.repository';
+ 
+ @Injectable()
+ export class PrismaInvoiceRepository extends InvoiceRepository {
+@@ -35,6 +35,21 @@ export class PrismaInvoiceRepository extends InvoiceRepository {
+     return row ? toDomain(row) : null;
+   }
+ 
++  async summarizeNoShows(from: Date, to: Date): Promise<NoShowSummary[]> {
++    const groups = await this.prisma.billingInvoice.groupBy({
++      by: ['practitionerId'],
++      where: { sourceType: 'NO_SHOW', practitionerId: { not: null }, occurredAt: { gte: from, lt: to } },
++      _count: { _all: true },
++      _sum: { totalCents: true },
++      orderBy: { practitionerId: 'asc' },
++    });
++    return groups.map((g) => ({
++      practitionerId: g.practitionerId as string,
++      noShows: g._count._all,
++      feesCents: g._sum.totalCents ?? 0,
++    }));
++  }
++
+   async save(invoice: Invoice): Promise<void> {
+     const s = invoice.toSnapshot();
+     await this.prisma.billingInvoice.create({
+@@ -46,6 +61,8 @@ export class PrismaInvoiceRepository extends InvoiceRepository {
+         status: s.status,
+         totalCents: invoice.totalCents,
+         issuedAt: s.issuedAt,
++        practitionerId: s.noShow?.practitionerId,
++        occurredAt: s.noShow?.missedAt,
+         lines: { create: s.lines.map((line) => ({ id: newId(), ...line })) },
+       },
+     });
+@@ -59,6 +76,10 @@ function toDomain(row: BillingInvoice & { lines: BillingInvoiceLine[] }): Invoic
+     source: { type: row.sourceType as InvoiceSourceType, id: row.sourceId },
+     status: row.status as InvoiceStatus,
+     issuedAt: row.issuedAt,
++    noShow:
++      row.practitionerId && row.occurredAt
++        ? { practitionerId: row.practitionerId, missedAt: row.occurredAt }
++        : undefined,
+     lines: row.lines.map(({ code, description, amountCents }) => ({ code, description, amountCents })),
+   });
+ }
+diff --git a/src/modules/scheduling/application/appointments.service.ts b/src/modules/scheduling/application/appointments.service.ts
+index 7d33f6b..4bb9c70 100644
+--- a/src/modules/scheduling/application/appointments.service.ts
++++ b/src/modules/scheduling/application/appointments.service.ts
+@@ -76,6 +76,7 @@ export class AppointmentsService {
+       ...eventEnvelope(this.clock.now()),
+       appointmentId: appointment.id,
+       personId: appointment.requester.personId,
++      practitionerId: appointment.practitionerId,
+       startsAt: appointment.startsAt.toISOString(),
+     };
+     await this.events.emitAsync(SchedulingEvents.AppointmentNoShow, event);
+diff --git a/test/clinic-flow.e2e-spec.ts b/test/clinic-flow.e2e-spec.ts
+index ee466a3..7354eed 100644
+--- a/test/clinic-flow.e2e-spec.ts
++++ b/test/clinic-flow.e2e-spec.ts
+@@ -101,6 +101,45 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+     ]);
+   });
+ 
++  it('reports no-shows and fees per practitioner for a period', async () => {
++    const book = async (practitionerId: string, startsAt: string, personId: string) =>
++      (
++        await http()
++          .post('/scheduling/appointments')
++          .send({ practitionerId, startsAt, requester: { personId, name: 'Ana' } })
++          .expect(201)
++      ).body.id as string;
++    const first = await book('dr-house', '2026-03-02T10:00:00.000Z', 'person-1');
++    const second = await book('dr-house', '2026-03-03T10:00:00.000Z', 'person-2');
++    const third = await book('dr-wilson', '2026-03-02T11:00:00.000Z', 'person-3');
++    const outside = await book('dr-wilson', '2026-04-02T11:00:00.000Z', 'person-4');
++    await book('dr-wilson', '2026-03-04T11:00:00.000Z', 'person-5');
++
++    clock.set(new Date('2026-04-02T12:00:00Z'));
++    for (const id of [first, second, third, outside]) {
++      await http().post(`/scheduling/appointments/${id}/no-show`).expect(200);
++    }
++
++    const response = await http()
++      .get('/reports/no-shows')
++      .query({ from: '2026-03-01', to: '2026-04-01' })
++      .expect(200);
++    expect(response.body).toEqual([
++      { practitionerId: 'dr-house', noShows: 2, totalFeesCents: 20_000 },
++      { practitionerId: 'dr-wilson', noShows: 1, totalFeesCents: 10_000 },
++    ]);
++  });
++
++  it('validates the period of the no-show report', async () => {
++    await http().get('/reports/no-shows').query({ from: '2026-03-01' }).expect(400);
++    await http().get('/reports/no-shows').query({ from: 'nope', to: '2026-04-01' }).expect(400);
++    const response = await http()
++      .get('/reports/no-shows')
++      .query({ from: '2026-04-01', to: '2026-03-01' })
++      .expect(422);
++    expect(response.body.error).toBe('InvalidReportPeriodError');
++  });
++
+   it('rejects double booking of the same practitioner slot', async () => {
+     await scheduleAppointment('person-1');
+ 

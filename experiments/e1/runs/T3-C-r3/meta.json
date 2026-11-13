@@ -1,0 +1,173 @@
+{
+  "runId": "T3-C-r3",
+  "plan": "main",
+  "task": "T3",
+  "arm": "C",
+  "rep": 3,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 18,
+      "outputTokens": 8304,
+      "cacheReadInputTokens": 186175,
+      "cacheCreationInputTokens": 27390,
+      "webSearchRequests": 0,
+      "costUSD": 0.229871,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1337,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": "CLAUDE.md"
+  },
+  "startedAt": "2026-11-13T12:03:35.646Z",
+  "finishedAt": "2026-11-13T12:05:06.690Z",
+  "wallMs": 75523,
+  "durationMs": 74558,
+  "durationApiMs": 55934,
+  "numTurns": 9,
+  "tokens": {
+    "input": 18,
+    "output": 8304,
+    "cacheRead": 186175,
+    "cacheCreation": 27390
+  },
+  "costUsd": 0.229871,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "`GET /reports/no-shows?from=...&to=...` is in place. `npm test` passes (30 unit and 6 e2e tests), and `check:arch`, lint and typecheck are clean.\n\n**Response**\n\n```json\n{\n  \"from\": \"...\",\n  \"to\": \"...\",\n  \"practitioners\": [\n    { \"practitionerId\": \"dr-house\", \"noShowCount\": 2, \"totalFeesCents\": 20000 }\n  ]\n}\n```\n\n- **Period:** `from` and `to` are both inclusive. A date-only `to` such as `2026-03-31` covers that whole day in UTC.\n- **What counts:** a no-show falls in the period by the appointment's scheduled start, not by when the fee was invoiced.\n- **Errors:** a missing or invalid date, or `from` after `to`, returns 400.\n\n**How it works across contexts**\n- The endpoint is in billing, because billing owns the fee amounts. It couldn't know the practitioner, and it can't call scheduling.\n- I added `practitionerId` to the `AppointmentNoShow` event in `src/contracts/scheduling.events.ts`. This is the only contract change, and scheduling already publishes the field on its other events.\n- Billing now stores its own copy of the practitioner and the missed time on no-show invoices. That meant two new nullable columns on `BillingInvoice` in `prisma/schema.prisma`: `practitionerId` and `missedAt`.\n- **Not modified:** `context-map.json`, since the scheduling → billing relation already existed.\n\n**Existing data:** no-show invoices created before this change have no practitioner or missed time, so the report excludes them. There's no backfill, because billing can't look that data up in scheduling. Apply the schema change with `npm run db:push`.\n\n**Tests added**\n- Unit tests for grouping per practitioner, filtering by period, and ignoring encounter invoices.\n- An e2e test that marks no-shows through the scheduling endpoint, including one outside the period, and checks the report.\n- An e2e test for the validation errors.",
+  "initialCommit": "3eda928615129c16a1480fbcee1f4537c856273f",
+  "filesChanged": [
+    {
+      "status": "M",
+      "path": "prisma/schema.prisma"
+    },
+    {
+      "status": "M",
+      "path": "src/contracts/scheduling.events.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/billing/api/reports.controller.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/api/scheduling-events.listener.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/billing.module.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/infrastructure/prisma-invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/application/appointments.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": null,
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": true,
+    "gateViolations": 0,
+    "rulesFired": [],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "2/2"
+  },
+  "gateRunsByAgent": 3,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": [
+    "M src/modules/billing/application/invoicing.service.spec.ts (1 assertion/test line(s) removed)"
+  ]
+}

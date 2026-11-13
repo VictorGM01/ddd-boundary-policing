@@ -1,0 +1,167 @@
+{
+  "runId": "T5-C-r2",
+  "plan": "main",
+  "task": "T5",
+  "arm": "C",
+  "rep": 2,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 14,
+      "outputTokens": 7201,
+      "cacheReadInputTokens": 132312,
+      "cacheCreationInputTokens": 25208,
+      "webSearchRequests": 0,
+      "costUSD": 0.19933240000000002,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1202,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": "CLAUDE.md"
+  },
+  "startedAt": "2026-11-13T12:00:27.129Z",
+  "finishedAt": "2026-11-13T12:01:55.833Z",
+  "wallMs": 70683,
+  "durationMs": 69634,
+  "durationApiMs": 55164,
+  "numTurns": 8,
+  "tokens": {
+    "input": 14,
+    "output": 7201,
+    "cacheRead": 132312,
+    "cacheCreation": 25208
+  },
+  "costUsd": 0.19933240000000002,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "Follow-up encounters are now billed without the consultation fee: a repeat `10101012` for the same payer and practitioner within 30 days is dropped from the invoice, and other procedures are still charged. `npm test` passes (33 unit tests and 5 e2e tests), and lint, typecheck and `npm run check:arch` pass too.\n\n**Contract and schema changes**\n- **Event:** billing didn't know the practitioner, so I added `practitionerId` to `EncounterCompleted`. Clinical already owns that field and now publishes it. This is the existing clinical → billing relation, so `context-map.json` is unchanged.\n- **Schema:** billing keeps its own copy as a nullable `BillingInvoice.practitionerId`. This is a schema change, so existing databases need `npm run db:push`.\n\n**Billing rule**\n- **Check:** `InvoicingService.invoiceEncounter` checks for an earlier invoice for the same payer and practitioner, from an encounter, that charged `10101012` within the last 30 days (inclusive). It uses a new repository method, `existsChargedLine`. If one exists, the consultation line is removed.\n- **Waived follow-ups:** a follow-up whose consultation was waived doesn't restart the 30 days, because only invoices that actually charged the consultation count.\n- **No-show fees and other procedures:** these never trigger the waiver.\n\n**Decision for you:** if the follow-up contains only the consultation, no invoice is issued and `invoiceEncounter` returns `null`. An invoice can't be empty, and I didn't want to add zero-amount lines. The catch is that `GET /billing/invoices?sourceType=ENCOUNTER&sourceId=…` returns 404 for those encounters. Say if you'd rather have a zero-total invoice.\n\n**Tests**\n- **Unit:** the new cases in `invoicing.service.spec.ts` cover the following:\n  - charging other procedures while waiving the consultation;\n  - the consultation-only follow-up;\n  - the day-30 boundary;\n  - a different practitioner or payer;\n  - the window not extending after a waived follow-up;\n  - no-show fees and other procedures not counting.\n- **e2e:** a full flow in `test/clinic-flow.e2e-spec.ts`: an initial consultation, then a follow-up 14 days later, whose invoice comes to 3,500.",
+  "initialCommit": "922e3ea0ce35b69094481073f0b5922adcd131b6",
+  "filesChanged": [
+    {
+      "status": "M",
+      "path": "prisma/schema.prisma"
+    },
+    {
+      "status": "M",
+      "path": "src/contracts/clinical.events.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/api/clinical-events.listener.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/price-list.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/infrastructure/prisma-invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/clinical/application/encounters.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": null,
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": true,
+    "gateViolations": 0,
+    "rulesFired": [],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 1,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": []
+}

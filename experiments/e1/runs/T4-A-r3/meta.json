@@ -1,0 +1,166 @@
+{
+  "runId": "T4-A-r3",
+  "plan": "main",
+  "task": "T4",
+  "arm": "A",
+  "rep": 3,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 14,
+      "outputTokens": 7475,
+      "cacheReadInputTokens": 125338,
+      "cacheCreationInputTokens": 27141,
+      "webSearchRequests": 0,
+      "costUSD": 0.2084096,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1728,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": null
+  },
+  "startedAt": "2026-11-12T23:07:30.928Z",
+  "finishedAt": "2026-11-12T23:08:44.419Z",
+  "wallMs": 60326,
+  "durationMs": 59431,
+  "durationApiMs": 49403,
+  "numTurns": 7,
+  "tokens": {
+    "input": 14,
+    "output": 7475,
+    "cacheRead": 125338,
+    "cacheCreation": 27141
+  },
+  "costUsd": 0.2084096,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "The front desk now refuses a check-in with a 422 and error `OverdueBalanceError` when the visitor has an invoice open for more than 30 days. `npm test` passes (34 unit tests and 6 e2e tests), and typecheck and lint are clean.\n\n- **Cross-context question:** front-desk can't import billing, since the contexts only talk through events and `src/contracts`. I added an `OverdueBalanceQuery` contract in `src/contracts/billing.queries.ts`. Billing implements it, and front-desk's `VisitsService.checkIn` calls it.\n- **Overdue rule:** it lives in billing. `Invoice.isOverdueAt(now)` is true when the invoice is still `OPEN` and was issued more than 30 days ago. Exactly 30 days is not overdue.\n- **Wiring:** `BillingModule` is now `@Global()` and exports the contract, which is how front-desk gets it without importing billing. That follows how `SharedKernelModule` shares `Clock`. If you'd rather have `FrontDeskModule` import `BillingModule` explicitly, that's a small change.\n- **Check order:** the overdue check runs after the existing state checks (cancelled, already checked in) and before the visit is saved or `VisitorCheckedIn` is published. A refused visitor doesn't create a clinical encounter.\n- **Tests:** the new tests cover the 30-day boundary, billing's `hasOverdueBalance`, and `VisitsService.checkIn`, including that nothing is published on refusal. The two e2e tests cover a 422 for an old no-show invoice and a normal check-in for a recent one.\n\nCheck-in is now blocked for anyone with an old no-show fee, because that is the only other kind of invoice besides encounters. Invoices are always `OPEN` today; no payment feature exists to change that.\n\nI haven't committed anything.",
+  "initialCommit": "97aeaeedb85c1488f00bed466009ef024d6c14dd",
+  "filesChanged": [
+    {
+      "status": "A",
+      "path": "src/contracts/billing.queries.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/billing.module.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/application/visits.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/application/visits.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/domain/visit.errors.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": null,
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": false,
+    "gateViolations": 9,
+    "rulesFired": [
+      "R2",
+      "R9"
+    ],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 0,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": []
+}

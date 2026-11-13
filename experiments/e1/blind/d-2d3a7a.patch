@@ -1,0 +1,511 @@
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 651a929..b618278 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -32,6 +32,14 @@ model FrontDeskVisit {
+   checkedInAt    DateTime?
+ }
+ 
++model FrontDeskOpenInvoice {
++  invoiceId String   @id
++  personId  String
++  issuedAt  DateTime
++
++  @@index([personId])
++}
++
+ model ClinicalEncounter {
+   id             String    @id
+   appointmentId  String    @unique
+diff --git a/src/contracts/billing.events.ts b/src/contracts/billing.events.ts
+new file mode 100644
+index 0000000..68e1a98
+--- /dev/null
++++ b/src/contracts/billing.events.ts
+@@ -0,0 +1,11 @@
++import type { IntegrationEvent, PersonId } from '@/shared-kernel';
++
++export const BillingEvents = {
++  InvoiceIssued: 'billing.invoice-issued',
++} as const;
++
++export interface InvoiceIssued extends IntegrationEvent {
++  invoiceId: string;
++  personId: PersonId;
++  issuedAt: string;
++}
+diff --git a/src/modules/billing/application/invoicing.service.spec.ts b/src/modules/billing/application/invoicing.service.spec.ts
+index fd8115e..40beb24 100644
+--- a/src/modules/billing/application/invoicing.service.spec.ts
++++ b/src/modules/billing/application/invoicing.service.spec.ts
+@@ -1,3 +1,5 @@
++import { EventEmitter2 } from '@nestjs/event-emitter';
++import { BillingEvents } from '@/contracts/billing.events';
+ import { FixedClock } from '@/shared-kernel';
+ import { Invoice, InvoiceSource } from '../domain/invoice';
+ import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+@@ -32,11 +34,18 @@ class InMemoryInvoiceRepository extends InvoiceRepository {
+ 
+ describe('InvoicingService', () => {
+   let repository: InMemoryInvoiceRepository;
++  let events: EventEmitter2;
+   let service: InvoicingService;
+ 
+   beforeEach(() => {
+     repository = new InMemoryInvoiceRepository();
+-    service = new InvoicingService(repository, new PriceList(), new FixedClock(new Date('2026-03-02T11:00:00Z')));
++    events = new EventEmitter2();
++    service = new InvoicingService(
++      repository,
++      new PriceList(),
++      new FixedClock(new Date('2026-03-02T11:00:00Z')),
++      events,
++    );
+   });
+ 
+   it('prices the procedure codes of an encounter into a persisted invoice', async () => {
+@@ -66,4 +75,32 @@ describe('InvoicingService', () => {
+     );
+     expect(repository.items[0].totalCents).toBe(10_000);
+   });
++
++  it('publishes InvoiceIssued with only what the consumer needs', async () => {
++    const published: unknown[] = [];
++    events.on(BillingEvents.InvoiceIssued, (event) => published.push(event));
++
++    const invoice = await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' });
++
++    expect(published).toEqual([
++      expect.objectContaining({
++        invoiceId: invoice.id,
++        personId: 'person-1',
++        issuedAt: '2026-03-02T11:00:00.000Z',
++      }),
++    ]);
++    expect(Object.keys(published[0] as object).sort()).toEqual(
++      ['eventId', 'invoiceId', 'issuedAt', 'occurredAt', 'personId'],
++    );
++  });
++
++  it('publishes nothing when the source was already invoiced', async () => {
++    await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' });
++    const published: unknown[] = [];
++    events.on(BillingEvents.InvoiceIssued, (event) => published.push(event));
++
++    await expect(service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' })).rejects.toThrow();
++
++    expect(published).toHaveLength(0);
++  });
+ });
+diff --git a/src/modules/billing/application/invoicing.service.ts b/src/modules/billing/application/invoicing.service.ts
+index 06680e2..9412d77 100644
+--- a/src/modules/billing/application/invoicing.service.ts
++++ b/src/modules/billing/application/invoicing.service.ts
+@@ -1,5 +1,7 @@
+ import { Injectable } from '@nestjs/common';
+-import { Clock, newId, PersonId } from '@/shared-kernel';
++import { EventEmitter2 } from '@nestjs/event-emitter';
++import { BillingEvents, InvoiceIssued } from '@/contracts/billing.events';
++import { Clock, eventEnvelope, newId, PersonId } from '@/shared-kernel';
+ import { Invoice, InvoiceLine, InvoiceSource } from '../domain/invoice';
+ import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+ import { InvoiceRepository } from '../domain/invoice.repository';
+@@ -11,6 +13,7 @@ export class InvoicingService {
+     private readonly invoices: InvoiceRepository,
+     private readonly priceList: PriceList,
+     private readonly clock: Clock,
++    private readonly events: EventEmitter2,
+   ) {}
+ 
+   async invoiceEncounter(input: { encounterId: string; payerId: PersonId; procedureCodes: string[] }): Promise<Invoice> {
+@@ -39,6 +42,14 @@ export class InvoicingService {
+     }
+     const invoice = Invoice.issue({ id: newId(), payerId, source, lines, issuedAt: this.clock.now() });
+     await this.invoices.save(invoice);
++
++    const event: InvoiceIssued = {
++      ...eventEnvelope(this.clock.now()),
++      invoiceId: invoice.id,
++      personId: payerId,
++      issuedAt: invoice.toSnapshot().issuedAt.toISOString(),
++    };
++    await this.events.emitAsync(BillingEvents.InvoiceIssued, event);
+     return invoice;
+   }
+ }
+diff --git a/src/modules/front-desk/api/billing-events.listener.ts b/src/modules/front-desk/api/billing-events.listener.ts
+new file mode 100644
+index 0000000..4c0da2d
+--- /dev/null
++++ b/src/modules/front-desk/api/billing-events.listener.ts
+@@ -0,0 +1,18 @@
++import { Injectable } from '@nestjs/common';
++import { OnEvent } from '@nestjs/event-emitter';
++import { BillingEvents, InvoiceIssued } from '@/contracts/billing.events';
++import { VisitsService } from '../application/visits.service';
++
++@Injectable()
++export class BillingEventsListener {
++  constructor(private readonly visits: VisitsService) {}
++
++  @OnEvent(BillingEvents.InvoiceIssued)
++  async onInvoiceIssued(event: InvoiceIssued): Promise<void> {
++    await this.visits.recordOpenInvoice({
++      invoiceId: event.invoiceId,
++      personId: event.personId,
++      issuedAt: new Date(event.issuedAt),
++    });
++  }
++}
+diff --git a/src/modules/front-desk/application/visits.service.ts b/src/modules/front-desk/application/visits.service.ts
+index 74c3649..862603e 100644
+--- a/src/modules/front-desk/application/visits.service.ts
++++ b/src/modules/front-desk/application/visits.service.ts
+@@ -2,8 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
+ import { EventEmitter2 } from '@nestjs/event-emitter';
+ import { FrontDeskEvents, VisitorCheckedIn } from '@/contracts/front-desk.events';
+ import { Clock, eventEnvelope, newId, PersonId, PractitionerId } from '@/shared-kernel';
++import { OpenInvoice } from '../domain/open-invoice';
++import { OpenInvoiceRepository } from '../domain/open-invoice.repository';
+ import { Visit } from '../domain/visit';
+ import { VisitRepository } from '../domain/visit.repository';
++import { VisitorBalance } from '../domain/visitor-balance';
+ import { WaitingQueue } from '../domain/waiting-queue';
+ 
+ export interface ExpectVisitorCommand {
+@@ -17,6 +20,7 @@ export interface ExpectVisitorCommand {
+ export class VisitsService {
+   constructor(
+     private readonly visits: VisitRepository,
++    private readonly openInvoices: OpenInvoiceRepository,
+     private readonly clock: Clock,
+     private readonly events: EventEmitter2,
+   ) {}
+@@ -37,12 +41,17 @@ export class VisitsService {
+     await this.visits.save(visit);
+   }
+ 
++  async recordOpenInvoice(invoice: OpenInvoice): Promise<void> {
++    await this.openInvoices.save(invoice);
++  }
++
+   async checkIn(appointmentId: string): Promise<Visit> {
+     const visit = await this.visits.findByAppointmentId(appointmentId);
+     if (!visit) {
+       throw new NotFoundException(`No expected visit for appointment ${appointmentId}`);
+     }
+-    visit.checkIn(this.clock.now());
++    const balance = VisitorBalance.of(await this.openInvoices.findByPerson(visit.toSnapshot().personId));
++    visit.checkIn(this.clock.now(), balance);
+     await this.visits.save(visit);
+ 
+     const s = visit.toSnapshot();
+diff --git a/src/modules/front-desk/domain/open-invoice.repository.ts b/src/modules/front-desk/domain/open-invoice.repository.ts
+new file mode 100644
+index 0000000..1cf4137
+--- /dev/null
++++ b/src/modules/front-desk/domain/open-invoice.repository.ts
+@@ -0,0 +1,7 @@
++import type { PersonId } from '@/shared-kernel';
++import type { OpenInvoice } from './open-invoice';
++
++export abstract class OpenInvoiceRepository {
++  abstract findByPerson(personId: PersonId): Promise<OpenInvoice[]>;
++  abstract save(invoice: OpenInvoice): Promise<void>;
++}
+diff --git a/src/modules/front-desk/domain/open-invoice.ts b/src/modules/front-desk/domain/open-invoice.ts
+new file mode 100644
+index 0000000..c633d6d
+--- /dev/null
++++ b/src/modules/front-desk/domain/open-invoice.ts
+@@ -0,0 +1,7 @@
++import type { PersonId } from '@/shared-kernel';
++
++export interface OpenInvoice {
++  invoiceId: string;
++  personId: PersonId;
++  issuedAt: Date;
++}
+diff --git a/src/modules/front-desk/domain/visit.errors.ts b/src/modules/front-desk/domain/visit.errors.ts
+index ba53760..c3e08f0 100644
+--- a/src/modules/front-desk/domain/visit.errors.ts
++++ b/src/modules/front-desk/domain/visit.errors.ts
+@@ -11,3 +11,9 @@ export class VisitAlreadyCheckedInError extends DomainError {
+     super('The visitor has already checked in');
+   }
+ }
++
++export class OverdueBalanceError extends DomainError {
++  constructor(overdueDays: number) {
++    super(`The visitor has an open invoice older than ${overdueDays} days`);
++  }
++}
+diff --git a/src/modules/front-desk/domain/visit.spec.ts b/src/modules/front-desk/domain/visit.spec.ts
+index 7394473..a829876 100644
+--- a/src/modules/front-desk/domain/visit.spec.ts
++++ b/src/modules/front-desk/domain/visit.spec.ts
+@@ -1,7 +1,10 @@
+ import { Visit } from './visit';
+-import { CheckInNotAllowedError, VisitAlreadyCheckedInError } from './visit.errors';
++import { CheckInNotAllowedError, OverdueBalanceError, VisitAlreadyCheckedInError } from './visit.errors';
++import { VisitorBalance } from './visitor-balance';
+ import { WaitingQueue } from './waiting-queue';
+ 
++const clearBalance = VisitorBalance.of([]);
++
+ function expected(id = 'v-1'): Visit {
+   return Visit.expect({
+     id,
+@@ -17,7 +20,7 @@ describe('Visit', () => {
+     const visit = expected();
+     const arrival = new Date('2026-03-02T09:50:00Z');
+ 
+-    visit.checkIn(arrival);
++    visit.checkIn(arrival, clearBalance);
+ 
+     expect(visit.status).toBe('CHECKED_IN');
+     expect(visit.checkedInAt).toEqual(arrival);
+@@ -27,19 +30,31 @@ describe('Visit', () => {
+     const visit = expected();
+     visit.cancel();
+ 
+-    expect(() => visit.checkIn(new Date())).toThrow(CheckInNotAllowedError);
++    expect(() => visit.checkIn(new Date(), clearBalance)).toThrow(CheckInNotAllowedError);
++  });
++
++  it('refuses to check in a visitor with an open invoice older than 30 days', () => {
++    const visit = expected();
++    const arrival = new Date('2026-03-02T09:50:00Z');
++    const balance = VisitorBalance.of([
++      { invoiceId: 'inv-1', personId: 'person-1', issuedAt: new Date('2026-01-30T09:49:00Z') },
++    ]);
++
++    expect(() => visit.checkIn(arrival, balance)).toThrow(OverdueBalanceError);
++    expect(visit.status).toBe('EXPECTED');
++    expect(visit.checkedInAt).toBeNull();
+   });
+ 
+   it('refuses a second check-in', () => {
+     const visit = expected();
+-    visit.checkIn(new Date());
++    visit.checkIn(new Date(), clearBalance);
+ 
+-    expect(() => visit.checkIn(new Date())).toThrow(VisitAlreadyCheckedInError);
++    expect(() => visit.checkIn(new Date(), clearBalance)).toThrow(VisitAlreadyCheckedInError);
+   });
+ 
+   it('keeps a checked-in visit when the appointment is cancelled afterwards', () => {
+     const visit = expected();
+-    visit.checkIn(new Date());
++    visit.checkIn(new Date(), clearBalance);
+ 
+     visit.cancel();
+ 
+@@ -52,8 +67,8 @@ describe('WaitingQueue', () => {
+     const late = expected('late');
+     const early = expected('early');
+     const notArrived = expected('absent');
+-    late.checkIn(new Date('2026-03-02T09:55:00Z'));
+-    early.checkIn(new Date('2026-03-02T09:40:00Z'));
++    late.checkIn(new Date('2026-03-02T09:55:00Z'), clearBalance);
++    early.checkIn(new Date('2026-03-02T09:40:00Z'), clearBalance);
+ 
+     const queue = WaitingQueue.of([late, notArrived, early]);
+ 
+diff --git a/src/modules/front-desk/domain/visit.ts b/src/modules/front-desk/domain/visit.ts
+index bd2cee1..8f50164 100644
+--- a/src/modules/front-desk/domain/visit.ts
++++ b/src/modules/front-desk/domain/visit.ts
+@@ -1,4 +1,5 @@
+ import type { PersonId, PractitionerId } from '@/shared-kernel';
++import type { VisitorBalance } from './visitor-balance';
+ import { CheckInNotAllowedError, VisitAlreadyCheckedInError } from './visit.errors';
+ 
+ export type VisitStatus = 'EXPECTED' | 'CHECKED_IN' | 'CANCELLED';
+@@ -44,13 +45,14 @@ export class Visit {
+     return this.props.checkedInAt;
+   }
+ 
+-  checkIn(now: Date): void {
++  checkIn(now: Date, balance: VisitorBalance): void {
+     if (this.props.status === 'CHECKED_IN') {
+       throw new VisitAlreadyCheckedInError();
+     }
+     if (this.props.status !== 'EXPECTED') {
+       throw new CheckInNotAllowedError(this.props.status);
+     }
++    balance.assertNotOverdue(now);
+     this.props.status = 'CHECKED_IN';
+     this.props.checkedInAt = now;
+   }
+diff --git a/src/modules/front-desk/domain/visitor-balance.spec.ts b/src/modules/front-desk/domain/visitor-balance.spec.ts
+new file mode 100644
+index 0000000..7dc6bfa
+--- /dev/null
++++ b/src/modules/front-desk/domain/visitor-balance.spec.ts
+@@ -0,0 +1,24 @@
++import { VisitorBalance } from './visitor-balance';
++import { OverdueBalanceError } from './visit.errors';
++
++const now = new Date('2026-04-01T12:00:00Z');
++const invoice = (issuedAt: string) => ({ invoiceId: `inv-${issuedAt}`, personId: 'person-1', issuedAt: new Date(issuedAt) });
++
++describe('VisitorBalance', () => {
++  it('is not overdue without open invoices', () => {
++    expect(VisitorBalance.of([]).isOverdue(now)).toBe(false);
++  });
++
++  it('is not overdue when every open invoice is at most 30 days old', () => {
++    const balance = VisitorBalance.of([invoice('2026-03-25T00:00:00Z'), invoice('2026-03-02T12:00:00Z')]);
++
++    expect(balance.isOverdue(now)).toBe(false);
++  });
++
++  it('is overdue when an open invoice is older than 30 days', () => {
++    const balance = VisitorBalance.of([invoice('2026-03-25T00:00:00Z'), invoice('2026-03-02T11:59:59Z')]);
++
++    expect(balance.isOverdue(now)).toBe(true);
++    expect(() => balance.assertNotOverdue(now)).toThrow(OverdueBalanceError);
++  });
++});
+diff --git a/src/modules/front-desk/domain/visitor-balance.ts b/src/modules/front-desk/domain/visitor-balance.ts
+new file mode 100644
+index 0000000..4355861
+--- /dev/null
++++ b/src/modules/front-desk/domain/visitor-balance.ts
+@@ -0,0 +1,24 @@
++import type { OpenInvoice } from './open-invoice';
++import { OverdueBalanceError } from './visit.errors';
++
++export const OVERDUE_AFTER_DAYS = 30;
++const DAY_MS = 24 * 60 * 60 * 1000;
++
++export class VisitorBalance {
++  private constructor(private readonly openInvoices: readonly OpenInvoice[]) {}
++
++  static of(openInvoices: readonly OpenInvoice[]): VisitorBalance {
++    return new VisitorBalance(openInvoices);
++  }
++
++  isOverdue(now: Date): boolean {
++    const cutoff = now.getTime() - OVERDUE_AFTER_DAYS * DAY_MS;
++    return this.openInvoices.some((invoice) => invoice.issuedAt.getTime() < cutoff);
++  }
++
++  assertNotOverdue(now: Date): void {
++    if (this.isOverdue(now)) {
++      throw new OverdueBalanceError(OVERDUE_AFTER_DAYS);
++    }
++  }
++}
+diff --git a/src/modules/front-desk/front-desk.module.ts b/src/modules/front-desk/front-desk.module.ts
+index c7b6c42..e61f70a 100644
+--- a/src/modules/front-desk/front-desk.module.ts
++++ b/src/modules/front-desk/front-desk.module.ts
+@@ -1,8 +1,11 @@
+ import { Module } from '@nestjs/common';
++import { BillingEventsListener } from './api/billing-events.listener';
+ import { SchedulingEventsListener } from './api/scheduling-events.listener';
+ import { VisitsController } from './api/visits.controller';
+ import { VisitsService } from './application/visits.service';
++import { OpenInvoiceRepository } from './domain/open-invoice.repository';
+ import { VisitRepository } from './domain/visit.repository';
++import { PrismaOpenInvoiceRepository } from './infrastructure/prisma-open-invoice.repository';
+ import { PrismaVisitRepository } from './infrastructure/prisma-visit.repository';
+ 
+ @Module({
+@@ -10,7 +13,9 @@ import { PrismaVisitRepository } from './infrastructure/prisma-visit.repository'
+   providers: [
+     VisitsService,
+     SchedulingEventsListener,
++    BillingEventsListener,
+     { provide: VisitRepository, useClass: PrismaVisitRepository },
++    { provide: OpenInvoiceRepository, useClass: PrismaOpenInvoiceRepository },
+   ],
+ })
+ export class FrontDeskModule {}
+diff --git a/src/modules/front-desk/infrastructure/prisma-open-invoice.repository.ts b/src/modules/front-desk/infrastructure/prisma-open-invoice.repository.ts
+new file mode 100644
+index 0000000..4ba25a6
+--- /dev/null
++++ b/src/modules/front-desk/infrastructure/prisma-open-invoice.repository.ts
+@@ -0,0 +1,25 @@
++import { Injectable } from '@nestjs/common';
++import { PrismaService } from '@/infrastructure/prisma/prisma.service';
++import type { PersonId } from '@/shared-kernel';
++import type { OpenInvoice } from '../domain/open-invoice';
++import { OpenInvoiceRepository } from '../domain/open-invoice.repository';
++
++@Injectable()
++export class PrismaOpenInvoiceRepository extends OpenInvoiceRepository {
++  constructor(private readonly prisma: PrismaService) {
++    super();
++  }
++
++  async findByPerson(personId: PersonId): Promise<OpenInvoice[]> {
++    return this.prisma.frontDeskOpenInvoice.findMany({ where: { personId } });
++  }
++
++  async save(invoice: OpenInvoice): Promise<void> {
++    const { invoiceId, ...data } = invoice;
++    await this.prisma.frontDeskOpenInvoice.upsert({
++      where: { invoiceId },
++      create: { invoiceId, ...data },
++      update: data,
++    });
++  }
++}
+diff --git a/test/clinic-flow.e2e-spec.ts b/test/clinic-flow.e2e-spec.ts
+index ee466a3..4842a22 100644
+--- a/test/clinic-flow.e2e-spec.ts
++++ b/test/clinic-flow.e2e-spec.ts
+@@ -29,6 +29,7 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+     clock.set(new Date('2026-03-02T08:00:00Z'));
+     const prisma = app.get(PrismaService);
+     await prisma.billingInvoice.deleteMany();
++    await prisma.frontDeskOpenInvoice.deleteMany();
+     await prisma.clinicalEncounter.deleteMany();
+     await prisma.frontDeskVisit.deleteMany();
+     await prisma.schedulingAppointment.deleteMany();
+@@ -114,4 +115,41 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+       .expect(422);
+     expect(response.body.error).toBe('SlotUnavailableError');
+   });
++
++  describe('overdue balance at check-in', () => {
++    async function noShowOn(personId: string, day: string) {
++      clock.set(new Date(`${day}T08:00:00Z`));
++      const appointmentId = await scheduleAppointment(personId, `${day}T10:00:00.000Z`);
++      clock.set(new Date(`${day}T10:20:00Z`));
++      await http().post(`/scheduling/appointments/${appointmentId}/no-show`).expect(200);
++    }
++
++    it('refuses the check-in of a visitor with an open invoice older than 30 days', async () => {
++      await noShowOn('person-50', '2026-03-02');
++      clock.set(new Date('2026-04-15T08:00:00Z'));
++      const appointmentId = await scheduleAppointment('person-50', '2026-04-15T10:00:00.000Z');
++
++      const response = await http().post(`/front-desk/visits/${appointmentId}/check-in`).expect(422);
++
++      expect(response.body.error).toBe('OverdueBalanceError');
++      const queue = await http().get('/front-desk/queue').expect(200);
++      expect(queue.body).toEqual([]);
++    });
++
++    it('accepts the check-in when the open invoice is not older than 30 days', async () => {
++      await noShowOn('person-51', '2026-03-02');
++      clock.set(new Date('2026-03-20T08:00:00Z'));
++      const appointmentId = await scheduleAppointment('person-51', '2026-03-20T10:00:00.000Z');
++
++      await http().post(`/front-desk/visits/${appointmentId}/check-in`).expect(200);
++    });
++
++    it('is not affected by the open invoices of other visitors', async () => {
++      await noShowOn('person-52', '2026-03-02');
++      clock.set(new Date('2026-04-15T08:00:00Z'));
++      const appointmentId = await scheduleAppointment('person-53', '2026-04-15T10:00:00.000Z');
++
++      await http().post(`/front-desk/visits/${appointmentId}/check-in`).expect(200);
++    });
++  });
+ });

@@ -1,0 +1,537 @@
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 651a929..eb5371c 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -67,3 +67,12 @@ model BillingInvoiceLine {
+   amountCents Int
+   invoice     BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+ }
++
++model ReportingNoShow {
++  appointmentId  String    @id
++  practitionerId String?
++  startsAt       DateTime?
++  feeCents       Int       @default(0)
++
++  @@index([startsAt])
++}
+diff --git a/src/app.module.ts b/src/app.module.ts
+index 7dcafe3..7989e34 100644
+--- a/src/app.module.ts
++++ b/src/app.module.ts
+@@ -6,6 +6,7 @@ import { PrismaModule } from './infrastructure/prisma/prisma.module';
+ import { BillingModule } from './modules/billing/billing.module';
+ import { ClinicalModule } from './modules/clinical/clinical.module';
+ import { FrontDeskModule } from './modules/front-desk/front-desk.module';
++import { ReportingModule } from './modules/reporting/reporting.module';
+ import { SchedulingModule } from './modules/scheduling/scheduling.module';
+ import { SharedKernelModule } from './shared-kernel/shared-kernel.module';
+ 
+@@ -18,6 +19,7 @@ import { SharedKernelModule } from './shared-kernel/shared-kernel.module';
+     FrontDeskModule,
+     ClinicalModule,
+     BillingModule,
++    ReportingModule,
+   ],
+   providers: [{ provide: APP_FILTER, useClass: DomainErrorFilter }],
+ })
+diff --git a/src/contracts/billing.events.ts b/src/contracts/billing.events.ts
+new file mode 100644
+index 0000000..404bb3c
+--- /dev/null
++++ b/src/contracts/billing.events.ts
+@@ -0,0 +1,10 @@
++import type { IntegrationEvent } from '@/shared-kernel';
++
++export const BillingEvents = {
++  NoShowFeeCharged: 'billing.no-show-fee-charged',
++} as const;
++
++export interface NoShowFeeCharged extends IntegrationEvent {
++  appointmentId: string;
++  amountCents: number;
++}
+diff --git a/src/contracts/scheduling.events.ts b/src/contracts/scheduling.events.ts
+index 8dbd6f2..60c3602 100644
+--- a/src/contracts/scheduling.events.ts
++++ b/src/contracts/scheduling.events.ts
+@@ -23,5 +23,6 @@ export interface AppointmentCancelled extends IntegrationEvent {
+ export interface AppointmentNoShow extends IntegrationEvent {
+   appointmentId: string;
+   personId: PersonId;
++  practitionerId: PractitionerId;
+   startsAt: string;
+ }
+diff --git a/src/modules/billing/application/invoicing.service.spec.ts b/src/modules/billing/application/invoicing.service.spec.ts
+index fd8115e..361aac6 100644
+--- a/src/modules/billing/application/invoicing.service.spec.ts
++++ b/src/modules/billing/application/invoicing.service.spec.ts
+@@ -1,3 +1,5 @@
++import { EventEmitter2 } from '@nestjs/event-emitter';
++import { BillingEvents } from '@/contracts/billing.events';
+ import { FixedClock } from '@/shared-kernel';
+ import { Invoice, InvoiceSource } from '../domain/invoice';
+ import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+@@ -32,11 +34,18 @@ class InMemoryInvoiceRepository extends InvoiceRepository {
+ 
+ describe('InvoicingService', () => {
+   let repository: InMemoryInvoiceRepository;
++  let events: EventEmitter2;
+   let service: InvoicingService;
+ 
+   beforeEach(() => {
+     repository = new InMemoryInvoiceRepository();
+-    service = new InvoicingService(repository, new PriceList(), new FixedClock(new Date('2026-03-02T11:00:00Z')));
++    events = new EventEmitter2();
++    service = new InvoicingService(
++      repository,
++      new PriceList(),
++      new FixedClock(new Date('2026-03-02T11:00:00Z')),
++      events,
++    );
+   });
+ 
+   it('prices the procedure codes of an encounter into a persisted invoice', async () => {
+@@ -66,4 +75,14 @@ describe('InvoicingService', () => {
+     );
+     expect(repository.items[0].totalCents).toBe(10_000);
+   });
++
++  it('announces the no-show fee it charged, and nothing when the charge is refused', async () => {
++    const charged: unknown[] = [];
++    events.on(BillingEvents.NoShowFeeCharged, (event) => charged.push(event));
++
++    await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' });
++    await expect(service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' })).rejects.toThrow();
++
++    expect(charged).toEqual([expect.objectContaining({ appointmentId: 'appt-1', amountCents: 10_000 })]);
++  });
+ });
+diff --git a/src/modules/billing/application/invoicing.service.ts b/src/modules/billing/application/invoicing.service.ts
+index 06680e2..b2ba49c 100644
+--- a/src/modules/billing/application/invoicing.service.ts
++++ b/src/modules/billing/application/invoicing.service.ts
+@@ -1,5 +1,7 @@
+ import { Injectable } from '@nestjs/common';
+-import { Clock, newId, PersonId } from '@/shared-kernel';
++import { EventEmitter2 } from '@nestjs/event-emitter';
++import { BillingEvents, NoShowFeeCharged } from '@/contracts/billing.events';
++import { Clock, eventEnvelope, newId, PersonId } from '@/shared-kernel';
+ import { Invoice, InvoiceLine, InvoiceSource } from '../domain/invoice';
+ import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+ import { InvoiceRepository } from '../domain/invoice.repository';
+@@ -11,6 +13,7 @@ export class InvoicingService {
+     private readonly invoices: InvoiceRepository,
+     private readonly priceList: PriceList,
+     private readonly clock: Clock,
++    private readonly events: EventEmitter2,
+   ) {}
+ 
+   async invoiceEncounter(input: { encounterId: string; payerId: PersonId; procedureCodes: string[] }): Promise<Invoice> {
+@@ -22,7 +25,17 @@ export class InvoicingService {
+   }
+ 
+   async chargeNoShow(input: { appointmentId: string; payerId: PersonId }): Promise<Invoice> {
+-    return this.issue(input.payerId, { type: 'NO_SHOW', id: input.appointmentId }, [this.priceList.noShowFee()]);
++    const invoice = await this.issue(input.payerId, { type: 'NO_SHOW', id: input.appointmentId }, [
++      this.priceList.noShowFee(),
++    ]);
++
++    const event: NoShowFeeCharged = {
++      ...eventEnvelope(this.clock.now()),
++      appointmentId: input.appointmentId,
++      amountCents: invoice.totalCents,
++    };
++    await this.events.emitAsync(BillingEvents.NoShowFeeCharged, event);
++    return invoice;
+   }
+ 
+   async invoicesOf(payerId: PersonId): Promise<Invoice[]> {
+diff --git a/src/modules/reporting/api/events.listener.ts b/src/modules/reporting/api/events.listener.ts
+new file mode 100644
+index 0000000..3ca4e26
+--- /dev/null
++++ b/src/modules/reporting/api/events.listener.ts
+@@ -0,0 +1,24 @@
++import { Injectable } from '@nestjs/common';
++import { OnEvent } from '@nestjs/event-emitter';
++import { BillingEvents, NoShowFeeCharged } from '@/contracts/billing.events';
++import { AppointmentNoShow, SchedulingEvents } from '@/contracts/scheduling.events';
++import { NoShowReportService } from '../application/no-show-report.service';
++
++@Injectable()
++export class ReportingEventsListener {
++  constructor(private readonly report: NoShowReportService) {}
++
++  @OnEvent(SchedulingEvents.AppointmentNoShow)
++  async onAppointmentNoShow(event: AppointmentNoShow): Promise<void> {
++    await this.report.trackNoShow({
++      appointmentId: event.appointmentId,
++      practitionerId: event.practitionerId,
++      startsAt: new Date(event.startsAt),
++    });
++  }
++
++  @OnEvent(BillingEvents.NoShowFeeCharged)
++  async onNoShowFeeCharged(event: NoShowFeeCharged): Promise<void> {
++    await this.report.trackFee({ appointmentId: event.appointmentId, amountCents: event.amountCents });
++  }
++}
+diff --git a/src/modules/reporting/api/reports.controller.ts b/src/modules/reporting/api/reports.controller.ts
+new file mode 100644
+index 0000000..3554f17
+--- /dev/null
++++ b/src/modules/reporting/api/reports.controller.ts
+@@ -0,0 +1,20 @@
++import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
++import { NoShowReportService } from '../application/no-show-report.service';
++import { InvalidReportPeriodError } from '../domain/report.errors';
++
++@Controller('reports')
++export class ReportsController {
++  constructor(private readonly noShowReport: NoShowReportService) {}
++
++  @Get('no-shows')
++  async noShows(@Query('from') from?: string, @Query('to') to?: string) {
++    try {
++      return await this.noShowReport.noShowsBetween(from, to);
++    } catch (error) {
++      if (error instanceof InvalidReportPeriodError) {
++        throw new BadRequestException(error.message);
++      }
++      throw error;
++    }
++  }
++}
+diff --git a/src/modules/reporting/application/no-show-report.service.spec.ts b/src/modules/reporting/application/no-show-report.service.spec.ts
+new file mode 100644
+index 0000000..b6aa120
+--- /dev/null
++++ b/src/modules/reporting/application/no-show-report.service.spec.ts
+@@ -0,0 +1,69 @@
++import { NoShowReportRepository, PractitionerNoShowSummary } from '../domain/no-show-report.repository';
++import { ReportPeriod } from '../domain/report-period';
++import { InvalidReportPeriodError } from '../domain/report.errors';
++import { NoShowReportService } from './no-show-report.service';
++
++class InMemoryNoShowReportRepository extends NoShowReportRepository {
++  readonly rows = new Map<string, { practitionerId?: string; startsAt?: Date; feeCents: number }>();
++
++  async recordNoShow(entry: { appointmentId: string; practitionerId: string; startsAt: Date }) {
++    const row = this.rows.get(entry.appointmentId) ?? { feeCents: 0 };
++    this.rows.set(entry.appointmentId, { ...row, practitionerId: entry.practitionerId, startsAt: entry.startsAt });
++  }
++
++  async recordFee(entry: { appointmentId: string; amountCents: number }) {
++    const row = this.rows.get(entry.appointmentId) ?? { feeCents: 0 };
++    this.rows.set(entry.appointmentId, { ...row, feeCents: entry.amountCents });
++  }
++
++  async summarize(period: ReportPeriod): Promise<PractitionerNoShowSummary[]> {
++    const byPractitioner = new Map<string, PractitionerNoShowSummary>();
++    for (const row of this.rows.values()) {
++      if (!row.practitionerId || !row.startsAt || row.startsAt < period.from || row.startsAt >= period.to) continue;
++      const entry = byPractitioner.get(row.practitionerId) ?? {
++        practitionerId: row.practitionerId,
++        noShows: 0,
++        feesChargedCents: 0,
++      };
++      entry.noShows += 1;
++      entry.feesChargedCents += row.feeCents;
++      byPractitioner.set(row.practitionerId, entry);
++    }
++    return [...byPractitioner.values()];
++  }
++}
++
++describe('NoShowReportService', () => {
++  let service: NoShowReportService;
++
++  beforeEach(() => {
++    service = new NoShowReportService(new InMemoryNoShowReportRepository());
++  });
++
++  it('summarizes no-shows and fees per practitioner within the period', async () => {
++    await service.trackNoShow({ appointmentId: 'a1', practitionerId: 'dr-house', startsAt: new Date('2026-03-02T10:00:00Z') });
++    await service.trackFee({ appointmentId: 'a1', amountCents: 10_000 });
++    await service.trackNoShow({ appointmentId: 'a2', practitionerId: 'dr-house', startsAt: new Date('2026-03-31T10:00:00Z') });
++    await service.trackFee({ appointmentId: 'a2', amountCents: 10_000 });
++    await service.trackNoShow({ appointmentId: 'a3', practitionerId: 'dr-wilson', startsAt: new Date('2026-03-05T10:00:00Z') });
++    await service.trackNoShow({ appointmentId: 'a4', practitionerId: 'dr-house', startsAt: new Date('2026-04-01T10:00:00Z') });
++
++    await expect(service.noShowsBetween('2026-03-01', '2026-03-31')).resolves.toEqual([
++      { practitionerId: 'dr-house', noShows: 2, feesChargedCents: 20_000 },
++      { practitionerId: 'dr-wilson', noShows: 1, feesChargedCents: 0 },
++    ]);
++  });
++
++  it('counts a fee that arrives before its no-show event', async () => {
++    await service.trackFee({ appointmentId: 'a1', amountCents: 10_000 });
++    await service.trackNoShow({ appointmentId: 'a1', practitionerId: 'dr-house', startsAt: new Date('2026-03-02T10:00:00Z') });
++
++    await expect(service.noShowsBetween('2026-03-01', '2026-03-31')).resolves.toEqual([
++      { practitionerId: 'dr-house', noShows: 1, feesChargedCents: 10_000 },
++    ]);
++  });
++
++  it('rejects an invalid period', async () => {
++    await expect(service.noShowsBetween('2026-03-01', undefined)).rejects.toThrow(InvalidReportPeriodError);
++  });
++});
+diff --git a/src/modules/reporting/application/no-show-report.service.ts b/src/modules/reporting/application/no-show-report.service.ts
+new file mode 100644
+index 0000000..71d2d59
+--- /dev/null
++++ b/src/modules/reporting/application/no-show-report.service.ts
+@@ -0,0 +1,20 @@
++import { Injectable } from '@nestjs/common';
++import { NoShowReportRepository, PractitionerNoShowSummary } from '../domain/no-show-report.repository';
++import { ReportPeriod } from '../domain/report-period';
++
++@Injectable()
++export class NoShowReportService {
++  constructor(private readonly report: NoShowReportRepository) {}
++
++  async noShowsBetween(from: string | undefined, to: string | undefined): Promise<PractitionerNoShowSummary[]> {
++    return this.report.summarize(ReportPeriod.parse(from, to));
++  }
++
++  async trackNoShow(input: { appointmentId: string; practitionerId: string; startsAt: Date }): Promise<void> {
++    await this.report.recordNoShow(input);
++  }
++
++  async trackFee(input: { appointmentId: string; amountCents: number }): Promise<void> {
++    await this.report.recordFee(input);
++  }
++}
+diff --git a/src/modules/reporting/domain/no-show-report.repository.ts b/src/modules/reporting/domain/no-show-report.repository.ts
+new file mode 100644
+index 0000000..2f5c943
+--- /dev/null
++++ b/src/modules/reporting/domain/no-show-report.repository.ts
+@@ -0,0 +1,14 @@
++import type { ReportPeriod } from './report-period';
++
++export interface PractitionerNoShowSummary {
++  practitionerId: string;
++  noShows: number;
++  feesChargedCents: number;
++}
++
++export abstract class NoShowReportRepository {
++  /** Idempotent; may arrive before or after `recordFee` for the same appointment. */
++  abstract recordNoShow(entry: { appointmentId: string; practitionerId: string; startsAt: Date }): Promise<void>;
++  abstract recordFee(entry: { appointmentId: string; amountCents: number }): Promise<void>;
++  abstract summarize(period: ReportPeriod): Promise<PractitionerNoShowSummary[]>;
++}
+diff --git a/src/modules/reporting/domain/report-period.spec.ts b/src/modules/reporting/domain/report-period.spec.ts
+new file mode 100644
+index 0000000..93e736a
+--- /dev/null
++++ b/src/modules/reporting/domain/report-period.spec.ts
+@@ -0,0 +1,28 @@
++import { ReportPeriod } from './report-period';
++import { InvalidReportPeriodError } from './report.errors';
++
++describe('ReportPeriod', () => {
++  it('treats a date-only `to` as the whole day', () => {
++    const period = ReportPeriod.parse('2026-03-01', '2026-03-31');
++
++    expect(period.from).toEqual(new Date('2026-03-01T00:00:00Z'));
++    expect(period.to).toEqual(new Date('2026-04-01T00:00:00Z'));
++  });
++
++  it('keeps an exact timestamp `to` as the exclusive end', () => {
++    const period = ReportPeriod.parse('2026-03-01T08:00:00Z', '2026-03-01T12:00:00Z');
++
++    expect(period.to).toEqual(new Date('2026-03-01T12:00:00Z'));
++  });
++
++  it.each([
++    [undefined, '2026-03-31'],
++    ['2026-03-01', undefined],
++    ['yesterday', '2026-03-31'],
++    ['2026-03-01', 'soon'],
++    ['2026-03-31', '2026-03-01'],
++    ['2026-03-01T10:00:00Z', '2026-03-01T10:00:00Z'],
++  ])('rejects from=%s to=%s', (from, to) => {
++    expect(() => ReportPeriod.parse(from, to)).toThrow(InvalidReportPeriodError);
++  });
++});
+diff --git a/src/modules/reporting/domain/report-period.ts b/src/modules/reporting/domain/report-period.ts
+new file mode 100644
+index 0000000..3e3ab0d
+--- /dev/null
++++ b/src/modules/reporting/domain/report-period.ts
+@@ -0,0 +1,31 @@
++import { InvalidReportPeriodError } from './report.errors';
++
++const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
++const DAY_MS = 86_400_000;
++
++/**
++ * Half-open interval [from, to). A date-only `to` (YYYY-MM-DD) covers that whole UTC day,
++ * so `from=2026-03-01&to=2026-03-31` includes every no-show on March 31st.
++ */
++export class ReportPeriod {
++  private constructor(
++    readonly from: Date,
++    readonly to: Date,
++  ) {}
++
++  static parse(from: string | undefined, to: string | undefined): ReportPeriod {
++    if (!from || !to) {
++      throw new InvalidReportPeriodError('from and to are required');
++    }
++    const start = new Date(from);
++    const end = new Date(to);
++    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
++      throw new InvalidReportPeriodError('from and to must be ISO-8601 dates');
++    }
++    const exclusiveEnd = DATE_ONLY.test(to) ? new Date(end.getTime() + DAY_MS) : end;
++    if (exclusiveEnd.getTime() <= start.getTime()) {
++      throw new InvalidReportPeriodError('to must be after from');
++    }
++    return new ReportPeriod(start, exclusiveEnd);
++  }
++}
+diff --git a/src/modules/reporting/domain/report.errors.ts b/src/modules/reporting/domain/report.errors.ts
+new file mode 100644
+index 0000000..b53da5f
+--- /dev/null
++++ b/src/modules/reporting/domain/report.errors.ts
+@@ -0,0 +1,7 @@
++import { DomainError } from '@/shared-kernel';
++
++export class InvalidReportPeriodError extends DomainError {
++  constructor(reason: string) {
++    super(`Invalid report period: ${reason}`);
++  }
++}
+diff --git a/src/modules/reporting/infrastructure/prisma-no-show-report.repository.ts b/src/modules/reporting/infrastructure/prisma-no-show-report.repository.ts
+new file mode 100644
+index 0000000..a6e6711
+--- /dev/null
++++ b/src/modules/reporting/infrastructure/prisma-no-show-report.repository.ts
+@@ -0,0 +1,43 @@
++import { Injectable } from '@nestjs/common';
++import { PrismaService } from '@/infrastructure/prisma/prisma.service';
++import { NoShowReportRepository, PractitionerNoShowSummary } from '../domain/no-show-report.repository';
++import type { ReportPeriod } from '../domain/report-period';
++
++@Injectable()
++export class PrismaNoShowReportRepository extends NoShowReportRepository {
++  constructor(private readonly prisma: PrismaService) {
++    super();
++  }
++
++  async recordNoShow(entry: { appointmentId: string; practitionerId: string; startsAt: Date }): Promise<void> {
++    const { appointmentId, ...data } = entry;
++    await this.prisma.reportingNoShow.upsert({
++      where: { appointmentId },
++      create: { appointmentId, ...data },
++      update: data,
++    });
++  }
++
++  async recordFee(entry: { appointmentId: string; amountCents: number }): Promise<void> {
++    await this.prisma.reportingNoShow.upsert({
++      where: { appointmentId: entry.appointmentId },
++      create: { appointmentId: entry.appointmentId, feeCents: entry.amountCents },
++      update: { feeCents: entry.amountCents },
++    });
++  }
++
++  async summarize(period: ReportPeriod): Promise<PractitionerNoShowSummary[]> {
++    const rows = await this.prisma.reportingNoShow.groupBy({
++      by: ['practitionerId'],
++      where: { startsAt: { gte: period.from, lt: period.to } },
++      _count: { _all: true },
++      _sum: { feeCents: true },
++      orderBy: { practitionerId: 'asc' },
++    });
++    return rows.map((row) => ({
++      practitionerId: row.practitionerId as string,
++      noShows: row._count._all,
++      feesChargedCents: row._sum.feeCents ?? 0,
++    }));
++  }
++}
+diff --git a/src/modules/reporting/reporting.module.ts b/src/modules/reporting/reporting.module.ts
+new file mode 100644
+index 0000000..52fc762
+--- /dev/null
++++ b/src/modules/reporting/reporting.module.ts
+@@ -0,0 +1,16 @@
++import { Module } from '@nestjs/common';
++import { ReportingEventsListener } from './api/events.listener';
++import { ReportsController } from './api/reports.controller';
++import { NoShowReportService } from './application/no-show-report.service';
++import { NoShowReportRepository } from './domain/no-show-report.repository';
++import { PrismaNoShowReportRepository } from './infrastructure/prisma-no-show-report.repository';
++
++@Module({
++  controllers: [ReportsController],
++  providers: [
++    NoShowReportService,
++    ReportingEventsListener,
++    { provide: NoShowReportRepository, useClass: PrismaNoShowReportRepository },
++  ],
++})
++export class ReportingModule {}
+diff --git a/src/modules/scheduling/application/appointments.service.ts b/src/modules/scheduling/application/appointments.service.ts
+index 7d33f6b..4bb9c70 100644
+--- a/src/modules/scheduling/application/appointments.service.ts
++++ b/src/modules/scheduling/application/appointments.service.ts
+@@ -76,6 +76,7 @@ export class AppointmentsService {
+       ...eventEnvelope(this.clock.now()),
+       appointmentId: appointment.id,
+       personId: appointment.requester.personId,
++      practitionerId: appointment.practitionerId,
+       startsAt: appointment.startsAt.toISOString(),
+     };
+     await this.events.emitAsync(SchedulingEvents.AppointmentNoShow, event);
+diff --git a/test/clinic-flow.e2e-spec.ts b/test/clinic-flow.e2e-spec.ts
+index ee466a3..c68c64d 100644
+--- a/test/clinic-flow.e2e-spec.ts
++++ b/test/clinic-flow.e2e-spec.ts
+@@ -28,6 +28,7 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+   beforeEach(async () => {
+     clock.set(new Date('2026-03-02T08:00:00Z'));
+     const prisma = app.get(PrismaService);
++    await prisma.reportingNoShow.deleteMany();
+     await prisma.billingInvoice.deleteMany();
+     await prisma.clinicalEncounter.deleteMany();
+     await prisma.frontDeskVisit.deleteMany();
+@@ -101,6 +102,31 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+     ]);
+   });
+ 
++  it('reports no-shows and the fees charged per practitioner in a period', async () => {
++    const first = await scheduleAppointment('person-1', '2026-03-02T10:00:00.000Z');
++    const second = await scheduleAppointment('person-2', '2026-03-03T10:00:00.000Z');
++    const outside = await scheduleAppointment('person-3', '2026-04-02T10:00:00.000Z');
++
++    clock.set(new Date('2026-04-02T11:00:00Z'));
++    for (const id of [first, second, outside]) {
++      await http().post(`/scheduling/appointments/${id}/no-show`).expect(200);
++    }
++
++    const report = await http()
++      .get('/reports/no-shows')
++      .query({ from: '2026-03-01', to: '2026-03-31' })
++      .expect(200);
++    expect(report.body).toEqual([{ practitionerId: 'dr-house', noShows: 2, feesChargedCents: 20_000 }]);
++
++    const empty = await http().get('/reports/no-shows').query({ from: '2026-05-01', to: '2026-05-31' }).expect(200);
++    expect(empty.body).toEqual([]);
++  });
++
++  it('rejects a no-show report without a valid period', async () => {
++    await http().get('/reports/no-shows').query({ from: '2026-03-01' }).expect(400);
++    await http().get('/reports/no-shows').query({ from: '2026-03-31', to: '2026-03-01' }).expect(400);
++  });
++
+   it('rejects double booking of the same practitioner slot', async () => {
+     await scheduleAppointment('person-1');
+ 

@@ -1,0 +1,325 @@
+diff --git a/src/contracts/billing.queries.ts b/src/contracts/billing.queries.ts
+new file mode 100644
+index 0000000..076e97e
+--- /dev/null
++++ b/src/contracts/billing.queries.ts
+@@ -0,0 +1,6 @@
++import type { PersonId } from '@/shared-kernel';
++
++/** Synchronous question other contexts may ask billing: does this person owe an overdue balance? */
++export abstract class OverdueBalanceQuery {
++  abstract hasOverdueBalance(personId: PersonId): Promise<boolean>;
++}
+diff --git a/src/modules/billing/application/invoicing.service.spec.ts b/src/modules/billing/application/invoicing.service.spec.ts
+index fd8115e..52ec3cc 100644
+--- a/src/modules/billing/application/invoicing.service.spec.ts
++++ b/src/modules/billing/application/invoicing.service.spec.ts
+@@ -66,4 +66,38 @@ describe('InvoicingService', () => {
+     );
+     expect(repository.items[0].totalCents).toBe(10_000);
+   });
++
++  describe('hasOverdueBalance', () => {
++    let clock: FixedClock;
++
++    beforeEach(() => {
++      clock = new FixedClock(new Date('2026-03-02T11:00:00Z'));
++      service = new InvoicingService(repository, new PriceList(), clock);
++    });
++
++    it('is false when the payer has no invoices', async () => {
++      expect(await service.hasOverdueBalance('person-1')).toBe(false);
++    });
++
++    it('is false while every invoice is at most 30 days old', async () => {
++      await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' });
++      clock.set(new Date('2026-04-01T11:00:00Z'));
++
++      expect(await service.hasOverdueBalance('person-1')).toBe(false);
++    });
++
++    it('is true when an invoice is older than 30 days', async () => {
++      await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' });
++      clock.set(new Date('2026-04-02T11:00:00Z'));
++
++      expect(await service.hasOverdueBalance('person-1')).toBe(true);
++    });
++
++    it('ignores the overdue invoices of other payers', async () => {
++      await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-2' });
++      clock.set(new Date('2026-05-01T11:00:00Z'));
++
++      expect(await service.hasOverdueBalance('person-1')).toBe(false);
++    });
++  });
+ });
+diff --git a/src/modules/billing/application/invoicing.service.ts b/src/modules/billing/application/invoicing.service.ts
+index 06680e2..b78f395 100644
+--- a/src/modules/billing/application/invoicing.service.ts
++++ b/src/modules/billing/application/invoicing.service.ts
+@@ -29,6 +29,11 @@ export class InvoicingService {
+     return this.invoices.findByPayer(payerId);
+   }
+ 
++  async hasOverdueBalance(payerId: PersonId): Promise<boolean> {
++    const now = this.clock.now();
++    return (await this.invoices.findByPayer(payerId)).some((invoice) => invoice.isOverdue(now));
++  }
++
+   async invoiceFor(source: InvoiceSource): Promise<Invoice | null> {
+     return this.invoices.findBySource(source);
+   }
+diff --git a/src/modules/billing/billing.module.ts b/src/modules/billing/billing.module.ts
+index 34c683b..b197bf5 100644
+--- a/src/modules/billing/billing.module.ts
++++ b/src/modules/billing/billing.module.ts
+@@ -1,4 +1,5 @@
+-import { Module } from '@nestjs/common';
++import { Global, Module } from '@nestjs/common';
++import { OverdueBalanceQuery } from '@/contracts/billing.queries';
+ import { ClinicalEventsListener } from './api/clinical-events.listener';
+ import { InvoicesController } from './api/invoices.controller';
+ import { SchedulingEventsListener } from './api/scheduling-events.listener';
+@@ -7,14 +8,17 @@ import { InvoiceRepository } from './domain/invoice.repository';
+ import { PriceList } from './domain/price-list';
+ import { PrismaInvoiceRepository } from './infrastructure/prisma-invoice.repository';
+ 
++@Global()
+ @Module({
+   controllers: [InvoicesController],
+   providers: [
+     InvoicingService,
+     ClinicalEventsListener,
+     SchedulingEventsListener,
++    { provide: OverdueBalanceQuery, useExisting: InvoicingService },
+     { provide: PriceList, useValue: new PriceList() },
+     { provide: InvoiceRepository, useClass: PrismaInvoiceRepository },
+   ],
++  exports: [OverdueBalanceQuery],
+ })
+ export class BillingModule {}
+diff --git a/src/modules/billing/domain/invoice.spec.ts b/src/modules/billing/domain/invoice.spec.ts
+index b23ab77..6fe9680 100644
+--- a/src/modules/billing/domain/invoice.spec.ts
++++ b/src/modules/billing/domain/invoice.spec.ts
+@@ -38,3 +38,16 @@ describe('PriceList', () => {
+     expect(() => new PriceList().linesFor(['99999999'])).toThrow(UnknownProcedureError);
+   });
+ });
++
++describe('Invoice overdue rule', () => {
++  const invoice = Invoice.issue({ ...base, lines: new PriceList().linesFor(['10101012']) });
++  const thirtyDaysLater = new Date('2026-04-01T11:00:00Z');
++
++  it('is not overdue on the 30th day', () => {
++    expect(invoice.isOverdue(thirtyDaysLater)).toBe(false);
++  });
++
++  it('is overdue once it is open for more than 30 days', () => {
++    expect(invoice.isOverdue(new Date(thirtyDaysLater.getTime() + 1))).toBe(true);
++  });
++});
+diff --git a/src/modules/billing/domain/invoice.ts b/src/modules/billing/domain/invoice.ts
+index 24a3676..99730a1 100644
+--- a/src/modules/billing/domain/invoice.ts
++++ b/src/modules/billing/domain/invoice.ts
+@@ -1,6 +1,9 @@
+ import type { PersonId } from '@/shared-kernel';
+ import { EmptyInvoiceError, InvalidLineAmountError } from './invoice.errors';
+ 
++export const OVERDUE_AFTER_DAYS = 30;
++const DAY_MS = 24 * 60 * 60 * 1000;
++
+ export type InvoiceSourceType = 'ENCOUNTER' | 'NO_SHOW';
+ export type InvoiceStatus = 'OPEN';
+ 
+@@ -59,6 +62,12 @@ export class Invoice {
+     return this.props.lines.reduce((sum, line) => sum + line.amountCents, 0);
+   }
+ 
++  isOverdue(now: Date): boolean {
++    return (
++      this.props.status === 'OPEN' && now.getTime() - this.props.issuedAt.getTime() > OVERDUE_AFTER_DAYS * DAY_MS
++    );
++  }
++
+   toSnapshot(): InvoiceSnapshot {
+     return { ...this.props, source: { ...this.props.source }, lines: this.props.lines.map((l) => ({ ...l })) };
+   }
+diff --git a/src/modules/front-desk/application/visits.service.spec.ts b/src/modules/front-desk/application/visits.service.spec.ts
+new file mode 100644
+index 0000000..e34e731
+--- /dev/null
++++ b/src/modules/front-desk/application/visits.service.spec.ts
+@@ -0,0 +1,84 @@
++import { NotFoundException } from '@nestjs/common';
++import type { EventEmitter2 } from '@nestjs/event-emitter';
++import { OverdueBalanceQuery } from '@/contracts/billing.queries';
++import { FrontDeskEvents } from '@/contracts/front-desk.events';
++import { FixedClock } from '@/shared-kernel';
++import { Visit, VisitSnapshot } from '../domain/visit';
++import { OverdueBalanceError } from '../domain/visit.errors';
++import { VisitRepository } from '../domain/visit.repository';
++import { VisitsService } from './visits.service';
++
++class InMemoryVisitRepository extends VisitRepository {
++  private readonly rows = new Map<string, VisitSnapshot>();
++
++  async findByAppointmentId(appointmentId: string) {
++    const row = [...this.rows.values()].find((r) => r.appointmentId === appointmentId);
++    return row ? Visit.restore(row) : null;
++  }
++
++  async findCheckedIn() {
++    return [...this.rows.values()].filter((r) => r.status === 'CHECKED_IN').map((r) => Visit.restore(r));
++  }
++
++  async save(visit: Visit) {
++    this.rows.set(visit.id, visit.toSnapshot());
++  }
++}
++
++class StubOverdueBalanceQuery extends OverdueBalanceQuery {
++  readonly overdue = new Set<string>();
++
++  async hasOverdueBalance(personId: string) {
++    return this.overdue.has(personId);
++  }
++}
++
++describe('VisitsService.checkIn', () => {
++  let repository: InMemoryVisitRepository;
++  let overdue: StubOverdueBalanceQuery;
++  let emitAsync: jest.Mock;
++  let service: VisitsService;
++
++  beforeEach(async () => {
++    repository = new InMemoryVisitRepository();
++    overdue = new StubOverdueBalanceQuery();
++    emitAsync = jest.fn().mockResolvedValue([]);
++    service = new VisitsService(
++      repository,
++      overdue,
++      new FixedClock(new Date('2026-03-02T09:50:00Z')),
++      { emitAsync } as unknown as EventEmitter2,
++    );
++    await service.expectVisitor({
++      appointmentId: 'appt-1',
++      personId: 'person-1',
++      practitionerId: 'dr-1',
++      expectedAt: new Date('2026-03-02T10:00:00Z'),
++    });
++  });
++
++  it('checks the visitor in when there is no overdue balance', async () => {
++    const visit = await service.checkIn('appt-1');
++
++    expect(visit.status).toBe('CHECKED_IN');
++    expect(emitAsync).toHaveBeenCalledWith(FrontDeskEvents.VisitorCheckedIn, expect.anything());
++  });
++
++  it('refuses the check-in when the visitor has an overdue balance', async () => {
++    overdue.overdue.add('person-1');
++
++    await expect(service.checkIn('appt-1')).rejects.toThrow(OverdueBalanceError);
++    expect((await repository.findByAppointmentId('appt-1'))?.status).toBe('EXPECTED');
++    expect(emitAsync).not.toHaveBeenCalled();
++  });
++
++  it('is not affected by the overdue balance of someone else', async () => {
++    overdue.overdue.add('person-2');
++
++    await expect(service.checkIn('appt-1')).resolves.toBeDefined();
++  });
++
++  it('still reports an unknown appointment as not found', async () => {
++    await expect(service.checkIn('missing')).rejects.toThrow(NotFoundException);
++  });
++});
+diff --git a/src/modules/front-desk/application/visits.service.ts b/src/modules/front-desk/application/visits.service.ts
+index 74c3649..65febe5 100644
+--- a/src/modules/front-desk/application/visits.service.ts
++++ b/src/modules/front-desk/application/visits.service.ts
+@@ -1,8 +1,10 @@
+ import { Injectable, NotFoundException } from '@nestjs/common';
+ import { EventEmitter2 } from '@nestjs/event-emitter';
++import { OverdueBalanceQuery } from '@/contracts/billing.queries';
+ import { FrontDeskEvents, VisitorCheckedIn } from '@/contracts/front-desk.events';
+ import { Clock, eventEnvelope, newId, PersonId, PractitionerId } from '@/shared-kernel';
+ import { Visit } from '../domain/visit';
++import { OverdueBalanceError } from '../domain/visit.errors';
+ import { VisitRepository } from '../domain/visit.repository';
+ import { WaitingQueue } from '../domain/waiting-queue';
+ 
+@@ -17,6 +19,7 @@ export interface ExpectVisitorCommand {
+ export class VisitsService {
+   constructor(
+     private readonly visits: VisitRepository,
++    private readonly overdueBalances: OverdueBalanceQuery,
+     private readonly clock: Clock,
+     private readonly events: EventEmitter2,
+   ) {}
+@@ -43,6 +46,9 @@ export class VisitsService {
+       throw new NotFoundException(`No expected visit for appointment ${appointmentId}`);
+     }
+     visit.checkIn(this.clock.now());
++    if (await this.overdueBalances.hasOverdueBalance(visit.toSnapshot().personId)) {
++      throw new OverdueBalanceError();
++    }
+     await this.visits.save(visit);
+ 
+     const s = visit.toSnapshot();
+diff --git a/src/modules/front-desk/domain/visit.errors.ts b/src/modules/front-desk/domain/visit.errors.ts
+index ba53760..2b7abef 100644
+--- a/src/modules/front-desk/domain/visit.errors.ts
++++ b/src/modules/front-desk/domain/visit.errors.ts
+@@ -11,3 +11,9 @@ export class VisitAlreadyCheckedInError extends DomainError {
+     super('The visitor has already checked in');
+   }
+ }
++
++export class OverdueBalanceError extends DomainError {
++  constructor() {
++    super('The visitor has an open invoice older than 30 days');
++  }
++}
+diff --git a/test/clinic-flow.e2e-spec.ts b/test/clinic-flow.e2e-spec.ts
+index ee466a3..41d5f69 100644
+--- a/test/clinic-flow.e2e-spec.ts
++++ b/test/clinic-flow.e2e-spec.ts
+@@ -114,4 +114,35 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+       .expect(422);
+     expect(response.body.error).toBe('SlotUnavailableError');
+   });
++
++  describe('overdue balance', () => {
++    async function noShowAt(personId: string, startsAt: string, at: string) {
++      clock.set(new Date(new Date(startsAt).getTime() - 24 * 60 * 60_000));
++      const appointmentId = await scheduleAppointment(personId, startsAt);
++      clock.set(new Date(at));
++      await http().post(`/scheduling/appointments/${appointmentId}/no-show`).expect(200);
++    }
++
++    it('refuses the check-in when the visitor has an invoice open for more than 30 days', async () => {
++      await noShowAt('person-5', '2026-01-10T10:00:00.000Z', '2026-01-10T10:20:00Z');
++      clock.set(new Date('2026-03-02T08:00:00Z'));
++      const appointmentId = await scheduleAppointment('person-5');
++
++      clock.set(new Date('2026-03-02T09:50:00Z'));
++      const response = await http().post(`/front-desk/visits/${appointmentId}/check-in`).expect(422);
++      expect(response.body.error).toBe('OverdueBalanceError');
++
++      const queue = await http().get('/front-desk/queue').expect(200);
++      expect(queue.body).toEqual([]);
++    });
++
++    it('accepts the check-in when the open invoice is recent', async () => {
++      await noShowAt('person-6', '2026-02-20T10:00:00.000Z', '2026-02-20T10:20:00Z');
++      clock.set(new Date('2026-03-02T08:00:00Z'));
++      const appointmentId = await scheduleAppointment('person-6');
++
++      clock.set(new Date('2026-03-02T09:50:00Z'));
++      await http().post(`/front-desk/visits/${appointmentId}/check-in`).expect(200);
++    });
++  });
+ });

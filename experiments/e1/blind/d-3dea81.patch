@@ -1,0 +1,491 @@
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 651a929..ee3c5d4 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -41,6 +41,7 @@ model ClinicalEncounter {
+   notes          String?
+   diagnosisCodes String    @default("[]")
+   procedureCodes String    @default("[]")
++  prescriptions  String    @default("[]")
+   arrivedAt      DateTime
+   startedAt      DateTime?
+   completedAt    DateTime?
+diff --git a/src/contracts/clinical.events.ts b/src/contracts/clinical.events.ts
+index d27961f..a162123 100644
+--- a/src/contracts/clinical.events.ts
++++ b/src/contracts/clinical.events.ts
+@@ -4,10 +4,16 @@ export const ClinicalEvents = {
+   EncounterCompleted: 'clinical.encounter-completed',
+ } as const;
+ 
++export interface PrescribedMedication {
++  medicationCode: string;
++  quantity: number;
++}
++
+ export interface EncounterCompleted extends IntegrationEvent {
+   encounterId: string;
+   appointmentId: string;
+   personId: PersonId;
+   procedureCodes: string[];
++  prescriptions: PrescribedMedication[];
+   completedAt: string;
+ }
+diff --git a/src/modules/billing/api/clinical-events.listener.ts b/src/modules/billing/api/clinical-events.listener.ts
+index fe239b5..42c141d 100644
+--- a/src/modules/billing/api/clinical-events.listener.ts
++++ b/src/modules/billing/api/clinical-events.listener.ts
+@@ -13,6 +13,7 @@ export class ClinicalEventsListener {
+       encounterId: event.encounterId,
+       payerId: event.personId,
+       procedureCodes: event.procedureCodes,
++      prescriptions: event.prescriptions ?? [],
+     });
+   }
+ }
+diff --git a/src/modules/billing/application/invoicing.service.spec.ts b/src/modules/billing/application/invoicing.service.spec.ts
+index fd8115e..c3e8c93 100644
+--- a/src/modules/billing/application/invoicing.service.spec.ts
++++ b/src/modules/billing/application/invoicing.service.spec.ts
+@@ -1,6 +1,6 @@
+ import { FixedClock } from '@/shared-kernel';
+ import { Invoice, InvoiceSource } from '../domain/invoice';
+-import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
++import { SourceAlreadyInvoicedError, UnknownMedicationError } from '../domain/invoice.errors';
+ import { InvoiceRepository } from '../domain/invoice.repository';
+ import { PriceList } from '../domain/price-list';
+ import { InvoicingService } from './invoicing.service';
+@@ -50,6 +50,37 @@ describe('InvoicingService', () => {
+     });
+   });
+ 
++  it('adds one priced line per prescription, multiplying the unit price by the quantity', async () => {
++    const invoice = await service.invoiceEncounter({
++      encounterId: 'e-1',
++      payerId: 'person-1',
++      procedureCodes: ['10101012'],
++      prescriptions: [
++        { medicationCode: 'MED-AMOX500', quantity: 3 },
++        { medicationCode: 'MED-IBU400', quantity: 2 },
++      ],
++    });
++
++    expect(invoice.toSnapshot().lines).toEqual([
++      expect.objectContaining({ code: '10101012', amountCents: 25_000 }),
++      expect.objectContaining({ code: 'MED-AMOX500', amountCents: 1_350 }),
++      expect.objectContaining({ code: 'MED-IBU400', amountCents: 240 }),
++    ]);
++    expect(invoice.totalCents).toBe(26_590);
++  });
++
++  it('does not issue an invoice when a prescribed medication has no price', async () => {
++    await expect(
++      service.invoiceEncounter({
++        encounterId: 'e-1',
++        payerId: 'person-1',
++        procedureCodes: ['10101012'],
++        prescriptions: [{ medicationCode: 'MED-UNKNOWN', quantity: 1 }],
++      }),
++    ).rejects.toThrow(UnknownMedicationError);
++    expect(repository.items).toHaveLength(0);
++  });
++
+   it('never invoices the same encounter twice', async () => {
+     const input = { encounterId: 'e-1', payerId: 'person-1', procedureCodes: ['10101012'] };
+     await service.invoiceEncounter(input);
+diff --git a/src/modules/billing/application/invoicing.service.ts b/src/modules/billing/application/invoicing.service.ts
+index 06680e2..2b49dd1 100644
+--- a/src/modules/billing/application/invoicing.service.ts
++++ b/src/modules/billing/application/invoicing.service.ts
+@@ -3,7 +3,7 @@ import { Clock, newId, PersonId } from '@/shared-kernel';
+ import { Invoice, InvoiceLine, InvoiceSource } from '../domain/invoice';
+ import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+ import { InvoiceRepository } from '../domain/invoice.repository';
+-import { PriceList } from '../domain/price-list';
++import { PrescribedItem, PriceList } from '../domain/price-list';
+ 
+ @Injectable()
+ export class InvoicingService {
+@@ -13,11 +13,16 @@ export class InvoicingService {
+     private readonly clock: Clock,
+   ) {}
+ 
+-  async invoiceEncounter(input: { encounterId: string; payerId: PersonId; procedureCodes: string[] }): Promise<Invoice> {
++  async invoiceEncounter(input: { encounterId: string; payerId: PersonId; procedureCodes: string[];
++    prescriptions?: PrescribedItem[];
++  }): Promise<Invoice> {
+     return this.issue(
+       input.payerId,
+       { type: 'ENCOUNTER', id: input.encounterId },
+-      this.priceList.linesFor(input.procedureCodes),
++      [
++        ...this.priceList.linesFor(input.procedureCodes),
++        ...this.priceList.medicationLinesFor(input.prescriptions ?? []),
++      ],
+     );
+   }
+ 
+diff --git a/src/modules/billing/domain/invoice.errors.ts b/src/modules/billing/domain/invoice.errors.ts
+index 006c455..fe03e5c 100644
+--- a/src/modules/billing/domain/invoice.errors.ts
++++ b/src/modules/billing/domain/invoice.errors.ts
+@@ -18,6 +18,12 @@ export class UnknownProcedureError extends DomainError {
+   }
+ }
+ 
++export class UnknownMedicationError extends DomainError {
++  constructor(code: string) {
++    super(`No price for medication ${code}`);
++  }
++}
++
+ export class SourceAlreadyInvoicedError extends DomainError {
+   constructor(sourceType: string, sourceId: string) {
+     super(`${sourceType} ${sourceId} has already been invoiced`);
+diff --git a/src/modules/billing/domain/price-list.ts b/src/modules/billing/domain/price-list.ts
+index 7aa7cef..ff9b4ec 100644
+--- a/src/modules/billing/domain/price-list.ts
++++ b/src/modules/billing/domain/price-list.ts
+@@ -1,17 +1,25 @@
+ import type { InvoiceLine } from './invoice';
+-import { UnknownProcedureError } from './invoice.errors';
++import { UnknownMedicationError, UnknownProcedureError } from './invoice.errors';
+ 
+ interface PriceEntry {
+   description: string;
+   amountCents: number;
+ }
+ 
++export interface PrescribedItem {
++  medicationCode: string;
++  quantity: number;
++}
++
+ export const NO_SHOW_FEE_CODE = 'NO-SHOW';
+ 
+ const DEFAULT_PRICES: Record<string, PriceEntry> = {
+   '10101012': { description: 'Office consultation', amountCents: 25_000 },
+   '40304361': { description: 'Complete blood count', amountCents: 3_500 },
+   '40101010': { description: 'Electrocardiogram', amountCents: 8_000 },
++  'MED-AMOX500': { description: 'Amoxicillin 500mg capsule', amountCents: 450 },
++  'MED-IBU400': { description: 'Ibuprofen 400mg tablet', amountCents: 120 },
++  'MED-DIPY1G': { description: 'Dipyrone 1g injection', amountCents: 900 },
+   [NO_SHOW_FEE_CODE]: { description: 'No-show fee', amountCents: 10_000 },
+ };
+ 
+@@ -28,6 +36,20 @@ export class PriceList {
+     });
+   }
+ 
++  medicationLinesFor(items: readonly PrescribedItem[]): InvoiceLine[] {
++    return items.map(({ medicationCode, quantity }) => {
++      const entry = this.prices[medicationCode];
++      if (!entry) {
++        throw new UnknownMedicationError(medicationCode);
++      }
++      return {
++        code: medicationCode,
++        description: `${entry.description} x${quantity}`,
++        amountCents: entry.amountCents * quantity,
++      };
++    });
++  }
++
+   noShowFee(): InvoiceLine {
+     return this.linesFor([NO_SHOW_FEE_CODE])[0];
+   }
+diff --git a/src/modules/clinical/api/encounters.controller.ts b/src/modules/clinical/api/encounters.controller.ts
+index a83e497..c764e41 100644
+--- a/src/modules/clinical/api/encounters.controller.ts
++++ b/src/modules/clinical/api/encounters.controller.ts
+@@ -8,6 +8,11 @@ interface CompleteEncounterBody {
+   procedureCodes?: string[];
+ }
+ 
++interface PrescribeBody {
++  medicationCode?: string;
++  quantity?: number;
++}
++
+ @Controller('clinical/encounters')
+ export class EncountersController {
+   constructor(private readonly encounters: EncountersService) {}
+@@ -26,6 +31,16 @@ export class EncountersController {
+     return toResponse(await this.encounters.start(id));
+   }
+ 
++  @Post(':id/prescriptions')
++  async prescribe(@Param('id') id: string, @Body() body: PrescribeBody) {
++    if (typeof body.medicationCode !== 'string' || typeof body.quantity !== 'number') {
++      throw new BadRequestException('medicationCode (string) and quantity (number) are required');
++    }
++    return toResponse(
++      await this.encounters.prescribe(id, { medicationCode: body.medicationCode, quantity: body.quantity }),
++    );
++  }
++
+   @Post(':id/complete')
+   @HttpCode(200)
+   async complete(@Param('id') id: string, @Body() body: CompleteEncounterBody) {
+@@ -47,6 +62,7 @@ function toResponse(encounter: Encounter) {
+     patientId: s.patientId,
+     status: s.status,
+     procedureCodes: s.procedureCodes,
++    prescriptions: s.prescriptions,
+     diagnosisCodes: s.diagnosisCodes,
+   };
+ }
+diff --git a/src/modules/clinical/application/encounters.service.ts b/src/modules/clinical/application/encounters.service.ts
+index 6c173a4..62eae94 100644
+--- a/src/modules/clinical/application/encounters.service.ts
++++ b/src/modules/clinical/application/encounters.service.ts
+@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
+ import { EventEmitter2 } from '@nestjs/event-emitter';
+ import { ClinicalEvents, EncounterCompleted } from '@/contracts/clinical.events';
+ import { Clock, eventEnvelope, newId, PersonId, PractitionerId } from '@/shared-kernel';
+-import { Encounter, EncounterRecord } from '../domain/encounter';
++import { Encounter, EncounterRecord, Prescription } from '../domain/encounter';
+ import { EncounterRepository } from '../domain/encounter.repository';
+ 
+ export interface RegisterArrivalCommand {
+@@ -34,6 +34,13 @@ export class EncountersService {
+     return encounter;
+   }
+ 
++  async prescribe(encounterId: string, prescription: Prescription): Promise<Encounter> {
++    const encounter = await this.load(encounterId);
++    encounter.prescribe(prescription);
++    await this.encounters.save(encounter);
++    return encounter;
++  }
++
+   async complete(encounterId: string, record: EncounterRecord): Promise<Encounter> {
+     const encounter = await this.load(encounterId);
+     encounter.complete(record, this.clock.now());
+@@ -46,6 +53,7 @@ export class EncountersService {
+       appointmentId: s.appointmentId,
+       personId: s.patientId,
+       procedureCodes: s.procedureCodes,
++      prescriptions: s.prescriptions,
+       completedAt: (s.completedAt as Date).toISOString(),
+     };
+     await this.events.emitAsync(ClinicalEvents.EncounterCompleted, event);
+diff --git a/src/modules/clinical/domain/encounter.errors.ts b/src/modules/clinical/domain/encounter.errors.ts
+index 37ba685..63ef884 100644
+--- a/src/modules/clinical/domain/encounter.errors.ts
++++ b/src/modules/clinical/domain/encounter.errors.ts
+@@ -11,3 +11,9 @@ export class ProcedureRequiredError extends DomainError {
+     super('An encounter can only be completed with at least one procedure code');
+   }
+ }
++
++export class InvalidPrescriptionError extends DomainError {
++  constructor(reason: string) {
++    super(`Invalid prescription: ${reason}`);
++  }
++}
+diff --git a/src/modules/clinical/domain/encounter.spec.ts b/src/modules/clinical/domain/encounter.spec.ts
+index 4301d55..7fe885d 100644
+--- a/src/modules/clinical/domain/encounter.spec.ts
++++ b/src/modules/clinical/domain/encounter.spec.ts
+@@ -1,5 +1,5 @@
+ import { Encounter } from './encounter';
+-import { InvalidEncounterTransitionError, ProcedureRequiredError } from './encounter.errors';
++import { InvalidEncounterTransitionError, InvalidPrescriptionError, ProcedureRequiredError } from './encounter.errors';
+ 
+ function arrived(): Encounter {
+   return Encounter.open({
+@@ -48,4 +48,46 @@ describe('Encounter', () => {
+ 
+     expect(() => encounter.complete(record, new Date())).toThrow(InvalidEncounterTransitionError);
+   });
++
++  describe('prescriptions', () => {
++    function inProgress(): Encounter {
++      const encounter = arrived();
++      encounter.start(new Date('2026-03-02T10:00:00Z'));
++      return encounter;
++    }
++
++    it('records prescriptions while the encounter is in progress', () => {
++      const encounter = inProgress();
++
++      encounter.prescribe({ medicationCode: ' MED-AMOX500 ', quantity: 3 });
++      encounter.prescribe({ medicationCode: 'MED-IBU400', quantity: 1 });
++
++      expect(encounter.toSnapshot().prescriptions).toEqual([
++        { medicationCode: 'MED-AMOX500', quantity: 3 },
++        { medicationCode: 'MED-IBU400', quantity: 1 },
++      ]);
++    });
++
++    it('rejects prescriptions before the encounter starts or after it completes', () => {
++      expect(() => arrived().prescribe({ medicationCode: 'MED-IBU400', quantity: 1 })).toThrow(
++        InvalidEncounterTransitionError,
++      );
++
++      const encounter = inProgress();
++      encounter.complete(record, new Date());
++      expect(() => encounter.prescribe({ medicationCode: 'MED-IBU400', quantity: 1 })).toThrow(
++        InvalidEncounterTransitionError,
++      );
++    });
++
++    it.each([0, -1, 1.5, NaN])('rejects quantity %p', (quantity) => {
++      expect(() => inProgress().prescribe({ medicationCode: 'MED-IBU400', quantity })).toThrow(
++        InvalidPrescriptionError,
++      );
++    });
++
++    it('rejects a blank medication code', () => {
++      expect(() => inProgress().prescribe({ medicationCode: '  ', quantity: 1 })).toThrow(InvalidPrescriptionError);
++    });
++  });
+ });
+diff --git a/src/modules/clinical/domain/encounter.ts b/src/modules/clinical/domain/encounter.ts
+index c1ae287..4838a1b 100644
+--- a/src/modules/clinical/domain/encounter.ts
++++ b/src/modules/clinical/domain/encounter.ts
+@@ -1,8 +1,13 @@
+ import type { PersonId, PractitionerId } from '@/shared-kernel';
+-import { InvalidEncounterTransitionError, ProcedureRequiredError } from './encounter.errors';
++import { InvalidEncounterTransitionError, InvalidPrescriptionError, ProcedureRequiredError } from './encounter.errors';
+ 
+ export type EncounterStatus = 'WAITING' | 'IN_PROGRESS' | 'COMPLETED';
+ 
++export interface Prescription {
++  medicationCode: string;
++  quantity: number;
++}
++
+ export interface EncounterSnapshot {
+   id: string;
+   appointmentId: string;
+@@ -12,6 +17,7 @@ export interface EncounterSnapshot {
+   notes: string | null;
+   diagnosisCodes: string[];
+   procedureCodes: string[];
++  prescriptions: Prescription[];
+   arrivedAt: Date;
+   startedAt: Date | null;
+   completedAt: Date | null;
+@@ -41,6 +47,7 @@ export class Encounter {
+       notes: null,
+       diagnosisCodes: [],
+       procedureCodes: [],
++      prescriptions: [],
+       startedAt: null,
+       completedAt: null,
+     });
+@@ -66,6 +73,20 @@ export class Encounter {
+     this.props.startedAt = now;
+   }
+ 
++  prescribe(prescription: Prescription): void {
++    if (this.props.status !== 'IN_PROGRESS') {
++      throw new InvalidEncounterTransitionError('prescribe for', this.props.status);
++    }
++    const medicationCode = prescription.medicationCode.trim();
++    if (medicationCode.length === 0) {
++      throw new InvalidPrescriptionError('medication code is required');
++    }
++    if (!Number.isInteger(prescription.quantity) || prescription.quantity <= 0) {
++      throw new InvalidPrescriptionError('quantity must be a positive integer');
++    }
++    this.props.prescriptions.push({ medicationCode, quantity: prescription.quantity });
++  }
++
+   complete(record: EncounterRecord, now: Date): void {
+     if (this.props.status !== 'IN_PROGRESS') {
+       throw new InvalidEncounterTransitionError('complete', this.props.status);
+@@ -86,6 +107,7 @@ export class Encounter {
+       ...this.props,
+       diagnosisCodes: [...this.props.diagnosisCodes],
+       procedureCodes: [...this.props.procedureCodes],
++      prescriptions: this.props.prescriptions.map((p) => ({ ...p })),
+     };
+   }
+ }
+diff --git a/src/modules/clinical/infrastructure/prisma-encounter.repository.ts b/src/modules/clinical/infrastructure/prisma-encounter.repository.ts
+index c1df965..1e999f9 100644
+--- a/src/modules/clinical/infrastructure/prisma-encounter.repository.ts
++++ b/src/modules/clinical/infrastructure/prisma-encounter.repository.ts
+@@ -1,7 +1,7 @@
+ import { Injectable } from '@nestjs/common';
+ import type { ClinicalEncounter } from '@prisma/client';
+ import { PrismaService } from '@/infrastructure/prisma/prisma.service';
+-import { Encounter, EncounterStatus } from '../domain/encounter';
++import { Encounter, EncounterStatus, Prescription } from '../domain/encounter';
+ import { EncounterRepository } from '../domain/encounter.repository';
+ 
+ @Injectable()
+@@ -21,11 +21,12 @@ export class PrismaEncounterRepository extends EncounterRepository {
+   }
+ 
+   async save(encounter: Encounter): Promise<void> {
+-    const { id, diagnosisCodes, procedureCodes, ...rest } = encounter.toSnapshot();
++    const { id, diagnosisCodes, procedureCodes, prescriptions, ...rest } = encounter.toSnapshot();
+     const data = {
+       ...rest,
+       diagnosisCodes: JSON.stringify(diagnosisCodes),
+       procedureCodes: JSON.stringify(procedureCodes),
++      prescriptions: JSON.stringify(prescriptions),
+     };
+     await this.prisma.clinicalEncounter.upsert({ where: { id }, create: { id, ...data }, update: data });
+   }
+@@ -37,5 +38,6 @@ function toDomain(row: ClinicalEncounter): Encounter {
+     status: row.status as EncounterStatus,
+     diagnosisCodes: JSON.parse(row.diagnosisCodes) as string[],
+     procedureCodes: JSON.parse(row.procedureCodes) as string[],
++    prescriptions: JSON.parse(row.prescriptions) as Prescription[],
+   });
+ }
+diff --git a/test/clinic-flow.e2e-spec.ts b/test/clinic-flow.e2e-spec.ts
+index ee466a3..76a8698 100644
+--- a/test/clinic-flow.e2e-spec.ts
++++ b/test/clinic-flow.e2e-spec.ts
+@@ -80,6 +80,44 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+     expect(JSON.stringify(invoices.body)).not.toContain('Z00.0');
+   });
+ 
++  it('prescribed medication becomes priced invoice lines when the encounter completes', async () => {
++    const appointmentId = await scheduleAppointment('person-55');
++    clock.set(new Date('2026-03-02T09:50:00Z'));
++    await http().post(`/front-desk/visits/${appointmentId}/check-in`).expect(200);
++    const encounterId = (await http().get('/clinical/encounters').query({ appointmentId }).expect(200)).body
++      .id as string;
++    const prescribe = (body: object) => http().post(`/clinical/encounters/${encounterId}/prescriptions`).send(body);
++
++    await prescribe({ medicationCode: 'MED-IBU400', quantity: 1 }).expect(422);
++    await http().post(`/clinical/encounters/${encounterId}/start`).expect(200);
++    await prescribe({ medicationCode: 'MED-AMOX500' }).expect(400);
++    await prescribe({ medicationCode: 'MED-AMOX500', quantity: 0 }).expect(422);
++    const prescribed = await prescribe({ medicationCode: 'MED-AMOX500', quantity: 3 }).expect(201);
++    expect(prescribed.body.prescriptions).toEqual([{ medicationCode: 'MED-AMOX500', quantity: 3 }]);
++    await prescribe({ medicationCode: 'MED-IBU400', quantity: 2 }).expect(201);
++
++    await http()
++      .post(`/clinical/encounters/${encounterId}/complete`)
++      .send({ procedureCodes: ['10101012'] })
++      .expect(200);
++    await prescribe({ medicationCode: 'MED-IBU400', quantity: 1 }).expect(422);
++
++    const invoices = await http()
++      .get('/billing/invoices')
++      .query({ sourceType: 'ENCOUNTER', sourceId: encounterId })
++      .expect(200);
++    expect(invoices.body).toEqual([
++      expect.objectContaining({
++        totalCents: 25_000 + 1_350 + 240,
++        lines: [
++          expect.objectContaining({ code: '10101012', amountCents: 25_000 }),
++          expect.objectContaining({ code: 'MED-AMOX500', amountCents: 1_350 }),
++          expect.objectContaining({ code: 'MED-IBU400', amountCents: 240 }),
++        ],
++      }),
++    ]);
++  });
++
+   it('cancelling an appointment prevents the check-in at the front desk', async () => {
+     const appointmentId = await scheduleAppointment('person-7');
+ 

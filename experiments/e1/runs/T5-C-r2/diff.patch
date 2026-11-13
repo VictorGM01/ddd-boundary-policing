@@ -1,0 +1,442 @@
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 651a929..3e6ab70 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -8,16 +8,16 @@ datasource db {
+ }
+ 
+ model SchedulingAppointment {
+-  id               String   @id
+-  practitionerId   String
+-  requesterId      String
+-  requesterName    String
+-  requesterPhone   String
+-  startsAt         DateTime
+-  endsAt           DateTime
+-  status           String
+-  cancelReason     String?
+-  createdAt        DateTime @default(now())
++  id             String   @id
++  practitionerId String
++  requesterId    String
++  requesterName  String
++  requesterPhone String
++  startsAt       DateTime
++  endsAt         DateTime
++  status         String
++  cancelReason   String?
++  createdAt      DateTime @default(now())
+ 
+   @@index([practitionerId, startsAt])
+ }
+@@ -47,14 +47,15 @@ model ClinicalEncounter {
+ }
+ 
+ model BillingInvoice {
+-  id         String               @id
+-  payerId    String
+-  sourceType String
+-  sourceId   String
+-  status     String
+-  totalCents Int
+-  issuedAt   DateTime
+-  lines      BillingInvoiceLine[]
++  id             String               @id
++  payerId        String
++  practitionerId String?
++  sourceType     String
++  sourceId       String
++  status         String
++  totalCents     Int
++  issuedAt       DateTime
++  lines          BillingInvoiceLine[]
+ 
+   @@unique([sourceType, sourceId])
+ }
+diff --git a/src/contracts/clinical.events.ts b/src/contracts/clinical.events.ts
+index d27961f..2e50788 100644
+--- a/src/contracts/clinical.events.ts
++++ b/src/contracts/clinical.events.ts
+@@ -1,4 +1,4 @@
+-import type { IntegrationEvent, PersonId } from '@/shared-kernel';
++import type { IntegrationEvent, PersonId, PractitionerId } from '@/shared-kernel';
+ 
+ export const ClinicalEvents = {
+   EncounterCompleted: 'clinical.encounter-completed',
+@@ -8,6 +8,7 @@ export interface EncounterCompleted extends IntegrationEvent {
+   encounterId: string;
+   appointmentId: string;
+   personId: PersonId;
++  practitionerId: PractitionerId;
+   procedureCodes: string[];
+   completedAt: string;
+ }
+diff --git a/src/modules/billing/api/clinical-events.listener.ts b/src/modules/billing/api/clinical-events.listener.ts
+index fe239b5..4880983 100644
+--- a/src/modules/billing/api/clinical-events.listener.ts
++++ b/src/modules/billing/api/clinical-events.listener.ts
+@@ -12,6 +12,7 @@ export class ClinicalEventsListener {
+     await this.invoicing.invoiceEncounter({
+       encounterId: event.encounterId,
+       payerId: event.personId,
++      practitionerId: event.practitionerId,
+       procedureCodes: event.procedureCodes,
+     });
+   }
+diff --git a/src/modules/billing/application/invoicing.service.spec.ts b/src/modules/billing/application/invoicing.service.spec.ts
+index fd8115e..38c0d90 100644
+--- a/src/modules/billing/application/invoicing.service.spec.ts
++++ b/src/modules/billing/application/invoicing.service.spec.ts
+@@ -12,6 +12,19 @@ class InMemoryInvoiceRepository extends InvoiceRepository {
+     return (await this.findBySource(source)) !== null;
+   }
+ 
++  async existsChargedLine(c: { payerId: string; practitionerId: string; code: string; since: Date }) {
++    return this.items.some((i) => {
++      const s = i.toSnapshot();
++      return (
++        s.payerId === c.payerId &&
++        s.practitionerId === c.practitionerId &&
++        s.source.type === 'ENCOUNTER' &&
++        s.issuedAt >= c.since &&
++        s.lines.some((l) => l.code === c.code)
++      );
++    });
++  }
++
+   async findByPayer(payerId: string) {
+     return this.items.filter((i) => i.toSnapshot().payerId === payerId);
+   }
+@@ -31,16 +44,18 @@ class InMemoryInvoiceRepository extends InvoiceRepository {
+ }
+ 
+ describe('InvoicingService', () => {
++  let clock: FixedClock;
+   let repository: InMemoryInvoiceRepository;
+   let service: InvoicingService;
+ 
+   beforeEach(() => {
+     repository = new InMemoryInvoiceRepository();
+-    service = new InvoicingService(repository, new PriceList(), new FixedClock(new Date('2026-03-02T11:00:00Z')));
++    clock = new FixedClock(new Date('2026-03-02T11:00:00Z'));
++    service = new InvoicingService(repository, new PriceList(), clock);
+   });
+ 
+   it('prices the procedure codes of an encounter into a persisted invoice', async () => {
+-    await service.invoiceEncounter({ encounterId: 'e-1', payerId: 'person-1', procedureCodes: ['10101012'] });
++    await service.invoiceEncounter({ encounterId: 'e-1', payerId: 'person-1', practitionerId: 'dr-house', procedureCodes: ['10101012'] });
+ 
+     expect(repository.items).toHaveLength(1);
+     expect(repository.items[0].toSnapshot()).toMatchObject({
+@@ -51,7 +66,7 @@ describe('InvoicingService', () => {
+   });
+ 
+   it('never invoices the same encounter twice', async () => {
+-    const input = { encounterId: 'e-1', payerId: 'person-1', procedureCodes: ['10101012'] };
++    const input = { encounterId: 'e-1', payerId: 'person-1', practitionerId: 'dr-house', procedureCodes: ['10101012'] };
+     await service.invoiceEncounter(input);
+ 
+     await expect(service.invoiceEncounter(input)).rejects.toThrow(SourceAlreadyInvoicedError);
+@@ -66,4 +81,65 @@ describe('InvoicingService', () => {
+     );
+     expect(repository.items[0].totalCents).toBe(10_000);
+   });
++
++  describe('follow-up encounters', () => {
++    const encounter = (id: string, codes: string[], overrides: { payerId?: string; practitionerId?: string } = {}) =>
++      service.invoiceEncounter({
++        encounterId: id,
++        payerId: 'person-1',
++        practitionerId: 'dr-house',
++        procedureCodes: codes,
++        ...overrides,
++      });
++    const daysLater = (days: number, hours = 0) => clock.set(new Date(Date.UTC(2026, 2, 2 + days, 11 + hours)));
++
++    beforeEach(async () => {
++      await encounter('e-1', ['10101012']);
++    });
++
++    it('does not charge the consultation again but still charges other procedures', async () => {
++      daysLater(10);
++      const invoice = await encounter('e-2', ['10101012', '40304361']);
++
++      expect(invoice?.toSnapshot().lines).toEqual([expect.objectContaining({ code: '40304361', amountCents: 3_500 })]);
++    });
++
++    it('issues no invoice when the follow-up only has the consultation', async () => {
++      daysLater(10);
++
++      expect(await encounter('e-2', ['10101012'])).toBeNull();
++      expect(repository.items).toHaveLength(1);
++    });
++
++    it('charges the consultation on the last day of the window but not after it', async () => {
++      daysLater(30);
++      expect(await encounter('e-2', ['10101012'])).toBeNull();
++
++      daysLater(30, 1);
++      const invoice = await encounter('e-3', ['10101012']);
++      expect(invoice?.totalCents).toBe(25_000);
++    });
++
++    it('charges the consultation for a different practitioner or a different payer', async () => {
++      daysLater(5);
++
++      expect((await encounter('e-2', ['10101012'], { practitionerId: 'dr-wilson' }))?.totalCents).toBe(25_000);
++      expect((await encounter('e-3', ['10101012'], { payerId: 'person-2' }))?.totalCents).toBe(25_000);
++    });
++
++    it('does not extend the window with a follow-up that was not charged', async () => {
++      daysLater(20);
++      await encounter('e-2', ['10101012']);
++
++      daysLater(40);
++      expect((await encounter('e-3', ['10101012']))?.totalCents).toBe(25_000);
++    });
++
++    it('does not treat other procedures or no-show fees as a consultation', async () => {
++      await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-2' });
++      await encounter('e-b', ['40304361'], { payerId: 'person-2' });
++
++      expect((await encounter('e-c', ['10101012'], { payerId: 'person-2' }))?.totalCents).toBe(25_000);
++    });
++  });
+ });
+diff --git a/src/modules/billing/application/invoicing.service.ts b/src/modules/billing/application/invoicing.service.ts
+index 06680e2..343e6e0 100644
+--- a/src/modules/billing/application/invoicing.service.ts
++++ b/src/modules/billing/application/invoicing.service.ts
+@@ -1,9 +1,12 @@
+ import { Injectable } from '@nestjs/common';
+-import { Clock, newId, PersonId } from '@/shared-kernel';
++import { Clock, newId, PersonId, PractitionerId } from '@/shared-kernel';
+ import { Invoice, InvoiceLine, InvoiceSource } from '../domain/invoice';
+ import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+ import { InvoiceRepository } from '../domain/invoice.repository';
+-import { PriceList } from '../domain/price-list';
++import { CONSULTATION_CODE, PriceList } from '../domain/price-list';
++
++const FOLLOW_UP_WINDOW_DAYS = 30;
++const DAY_MS = 24 * 60 * 60 * 1000;
+ 
+ @Injectable()
+ export class InvoicingService {
+@@ -13,12 +16,34 @@ export class InvoicingService {
+     private readonly clock: Clock,
+   ) {}
+ 
+-  async invoiceEncounter(input: { encounterId: string; payerId: PersonId; procedureCodes: string[] }): Promise<Invoice> {
+-    return this.issue(
+-      input.payerId,
+-      { type: 'ENCOUNTER', id: input.encounterId },
+-      this.priceList.linesFor(input.procedureCodes),
+-    );
++  /**
++   * A consultation repeated for the same payer and practitioner within 30 days of a previously charged one is a
++   * follow-up and is not charged again. Returns null when nothing is left to charge.
++   */
++  async invoiceEncounter(input: {
++    encounterId: string;
++    payerId: PersonId;
++    practitionerId: PractitionerId;
++    procedureCodes: string[];
++  }): Promise<Invoice | null> {
++    const source: InvoiceSource = { type: 'ENCOUNTER', id: input.encounterId };
++    if (await this.invoices.existsForSource(source)) {
++      throw new SourceAlreadyInvoicedError(source.type, source.id);
++    }
++    const now = this.clock.now();
++    const isFollowUp =
++      input.procedureCodes.includes(CONSULTATION_CODE) &&
++      (await this.invoices.existsChargedLine({
++        payerId: input.payerId,
++        practitionerId: input.practitionerId,
++        code: CONSULTATION_CODE,
++        since: new Date(now.getTime() - FOLLOW_UP_WINDOW_DAYS * DAY_MS),
++      }));
++    const chargeable = isFollowUp ? input.procedureCodes.filter((c) => c !== CONSULTATION_CODE) : input.procedureCodes;
++    if (chargeable.length === 0) {
++      return null;
++    }
++    return this.issue(input.payerId, source, this.priceList.linesFor(chargeable), input.practitionerId);
+   }
+ 
+   async chargeNoShow(input: { appointmentId: string; payerId: PersonId }): Promise<Invoice> {
+@@ -33,11 +58,13 @@ export class InvoicingService {
+     return this.invoices.findBySource(source);
+   }
+ 
+-  private async issue(payerId: PersonId, source: InvoiceSource, lines: InvoiceLine[]): Promise<Invoice> {
++  private async issue(payerId: PersonId, source: InvoiceSource, lines: InvoiceLine[],
++    practitionerId?: PractitionerId,
++  ): Promise<Invoice> {
+     if (await this.invoices.existsForSource(source)) {
+       throw new SourceAlreadyInvoicedError(source.type, source.id);
+     }
+-    const invoice = Invoice.issue({ id: newId(), payerId, source, lines, issuedAt: this.clock.now() });
++    const invoice = Invoice.issue({ id: newId(), payerId, practitionerId, source, lines, issuedAt: this.clock.now() });
+     await this.invoices.save(invoice);
+     return invoice;
+   }
+diff --git a/src/modules/billing/domain/invoice.repository.ts b/src/modules/billing/domain/invoice.repository.ts
+index 47ca9b8..2bac0c9 100644
+--- a/src/modules/billing/domain/invoice.repository.ts
++++ b/src/modules/billing/domain/invoice.repository.ts
+@@ -2,6 +2,12 @@ import type { Invoice, InvoiceSource } from './invoice';
+ 
+ export abstract class InvoiceRepository {
+   abstract existsForSource(source: InvoiceSource): Promise<boolean>;
++  abstract existsChargedLine(criteria: {
++    payerId: string;
++    practitionerId: string;
++    code: string;
++    since: Date;
++  }): Promise<boolean>;
+   abstract findByPayer(payerId: string): Promise<Invoice[]>;
+   abstract findBySource(source: InvoiceSource): Promise<Invoice | null>;
+   abstract save(invoice: Invoice): Promise<void>;
+diff --git a/src/modules/billing/domain/invoice.ts b/src/modules/billing/domain/invoice.ts
+index 24a3676..32bf218 100644
+--- a/src/modules/billing/domain/invoice.ts
++++ b/src/modules/billing/domain/invoice.ts
+@@ -1,4 +1,4 @@
+-import type { PersonId } from '@/shared-kernel';
++import type { PersonId, PractitionerId } from '@/shared-kernel';
+ import { EmptyInvoiceError, InvalidLineAmountError } from './invoice.errors';
+ 
+ export type InvoiceSourceType = 'ENCOUNTER' | 'NO_SHOW';
+@@ -18,6 +18,7 @@ export interface InvoiceLine {
+ export interface InvoiceSnapshot {
+   id: string;
+   payerId: PersonId;
++  practitionerId: PractitionerId | null;
+   source: InvoiceSource;
+   status: InvoiceStatus;
+   lines: InvoiceLine[];
+@@ -27,6 +28,7 @@ export interface InvoiceSnapshot {
+ export interface IssueInvoiceInput {
+   id: string;
+   payerId: PersonId;
++  practitionerId?: PractitionerId;
+   source: InvoiceSource;
+   lines: InvoiceLine[];
+   issuedAt: Date;
+@@ -44,7 +46,7 @@ export class Invoice {
+         throw new InvalidLineAmountError(line.code);
+       }
+     }
+-    return new Invoice({ ...input, lines: input.lines.map((l) => ({ ...l })), status: 'OPEN' });
++    return new Invoice({ ...input, practitionerId: input.practitionerId ?? null, lines: input.lines.map((l) => ({ ...l })), status: 'OPEN' });
+   }
+ 
+   static restore(snapshot: InvoiceSnapshot): Invoice {
+diff --git a/src/modules/billing/domain/price-list.ts b/src/modules/billing/domain/price-list.ts
+index 7aa7cef..c4a5e23 100644
+--- a/src/modules/billing/domain/price-list.ts
++++ b/src/modules/billing/domain/price-list.ts
+@@ -6,10 +6,11 @@ interface PriceEntry {
+   amountCents: number;
+ }
+ 
++export const CONSULTATION_CODE = '10101012';
+ export const NO_SHOW_FEE_CODE = 'NO-SHOW';
+ 
+ const DEFAULT_PRICES: Record<string, PriceEntry> = {
+-  '10101012': { description: 'Office consultation', amountCents: 25_000 },
++  [CONSULTATION_CODE]: { description: 'Office consultation', amountCents: 25_000 },
+   '40304361': { description: 'Complete blood count', amountCents: 3_500 },
+   '40101010': { description: 'Electrocardiogram', amountCents: 8_000 },
+   [NO_SHOW_FEE_CODE]: { description: 'No-show fee', amountCents: 10_000 },
+diff --git a/src/modules/billing/infrastructure/prisma-invoice.repository.ts b/src/modules/billing/infrastructure/prisma-invoice.repository.ts
+index 83cec31..0c983a0 100644
+--- a/src/modules/billing/infrastructure/prisma-invoice.repository.ts
++++ b/src/modules/billing/infrastructure/prisma-invoice.repository.ts
+@@ -18,6 +18,24 @@ export class PrismaInvoiceRepository extends InvoiceRepository {
+     return count > 0;
+   }
+ 
++  async existsChargedLine(criteria: {
++    payerId: string;
++    practitionerId: string;
++    code: string;
++    since: Date;
++  }): Promise<boolean> {
++    const count = await this.prisma.billingInvoice.count({
++      where: {
++        payerId: criteria.payerId,
++        practitionerId: criteria.practitionerId,
++        sourceType: 'ENCOUNTER',
++        issuedAt: { gte: criteria.since },
++        lines: { some: { code: criteria.code } },
++      },
++    });
++    return count > 0;
++  }
++
+   async findByPayer(payerId: string): Promise<Invoice[]> {
+     const rows = await this.prisma.billingInvoice.findMany({
+       where: { payerId },
+@@ -41,6 +59,7 @@ export class PrismaInvoiceRepository extends InvoiceRepository {
+       data: {
+         id: s.id,
+         payerId: s.payerId,
++        practitionerId: s.practitionerId,
+         sourceType: s.source.type,
+         sourceId: s.source.id,
+         status: s.status,
+@@ -57,6 +76,7 @@ function toDomain(row: BillingInvoice & { lines: BillingInvoiceLine[] }): Invoic
+     id: row.id,
+     payerId: row.payerId,
+     source: { type: row.sourceType as InvoiceSourceType, id: row.sourceId },
++    practitionerId: row.practitionerId,
+     status: row.status as InvoiceStatus,
+     issuedAt: row.issuedAt,
+     lines: row.lines.map(({ code, description, amountCents }) => ({ code, description, amountCents })),
+diff --git a/src/modules/clinical/application/encounters.service.ts b/src/modules/clinical/application/encounters.service.ts
+index 6c173a4..3d7b50c 100644
+--- a/src/modules/clinical/application/encounters.service.ts
++++ b/src/modules/clinical/application/encounters.service.ts
+@@ -45,6 +45,7 @@ export class EncountersService {
+       encounterId: s.id,
+       appointmentId: s.appointmentId,
+       personId: s.patientId,
++      practitionerId: s.practitionerId,
+       procedureCodes: s.procedureCodes,
+       completedAt: (s.completedAt as Date).toISOString(),
+     };
+diff --git a/test/clinic-flow.e2e-spec.ts b/test/clinic-flow.e2e-spec.ts
+index ee466a3..3e5c46c 100644
+--- a/test/clinic-flow.e2e-spec.ts
++++ b/test/clinic-flow.e2e-spec.ts
+@@ -80,6 +80,30 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+     expect(JSON.stringify(invoices.body)).not.toContain('Z00.0');
+   });
+ 
++  it('a follow-up within 30 days is not charged the consultation again, other procedures are', async () => {
++    async function completeVisit(startsAt: string, checkInAt: string, procedureCodes: string[]) {
++      const appointmentId = await scheduleAppointment('person-5', startsAt);
++      clock.set(new Date(checkInAt));
++      await http().post(`/front-desk/visits/${appointmentId}/check-in`).expect(200);
++      const encounter = await http().get('/clinical/encounters').query({ appointmentId }).expect(200);
++      const encounterId = encounter.body.id as string;
++      await http().post(`/clinical/encounters/${encounterId}/start`).expect(200);
++      await http().post(`/clinical/encounters/${encounterId}/complete`).send({ procedureCodes }).expect(200);
++      return encounterId;
++    }
++
++    await completeVisit('2026-03-02T10:00:00.000Z', '2026-03-02T09:50:00Z', ['10101012']);
++    const followUpId = await completeVisit('2026-03-16T10:00:00.000Z', '2026-03-16T09:50:00Z', [
++      '10101012',
++      '40304361',
++    ]);
++
++    const invoices = await http().get('/billing/invoices').query({ payerId: 'person-5' }).expect(200);
++    expect(invoices.body).toHaveLength(2);
++    const followUp = invoices.body.find((i: { source: { id: string } }) => i.source.id === followUpId);
++    expect(followUp).toMatchObject({ totalCents: 3_500, lines: [expect.objectContaining({ code: '40304361' })] });
++  });
++
+   it('cancelling an appointment prevents the check-in at the front desk', async () => {
+     const appointmentId = await scheduleAppointment('person-7');
+ 

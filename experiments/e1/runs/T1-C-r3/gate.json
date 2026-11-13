@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "durationMs": 454,
+  "dependencyCruiserMs": 454,
+  "eslintMs": 449,
+  "rulesFired": [],
+  "violations": []
+}

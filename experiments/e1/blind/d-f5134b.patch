@@ -1,0 +1,450 @@
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 651a929..7cd1b6c 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -30,6 +30,7 @@ model FrontDeskVisit {
+   expectedAt     DateTime
+   status         String
+   checkedInAt    DateTime?
++  servedAt       DateTime?
+ }
+ 
+ model ClinicalEncounter {
+diff --git a/src/contracts/clinical.events.ts b/src/contracts/clinical.events.ts
+index d27961f..8247bd6 100644
+--- a/src/contracts/clinical.events.ts
++++ b/src/contracts/clinical.events.ts
+@@ -1,6 +1,7 @@
+ import type { IntegrationEvent, PersonId } from '@/shared-kernel';
+ 
+ export const ClinicalEvents = {
++  EncounterStarted: 'clinical.encounter-started',
+   EncounterCompleted: 'clinical.encounter-completed',
+ } as const;
+ 
+@@ -11,3 +12,8 @@ export interface EncounterCompleted extends IntegrationEvent {
+   procedureCodes: string[];
+   completedAt: string;
+ }
++
++export interface EncounterStarted extends IntegrationEvent {
++  appointmentId: string;
++  startedAt: string;
++}
+diff --git a/src/modules/clinical/application/encounters.service.ts b/src/modules/clinical/application/encounters.service.ts
+index 6c173a4..b7682b4 100644
+--- a/src/modules/clinical/application/encounters.service.ts
++++ b/src/modules/clinical/application/encounters.service.ts
+@@ -1,6 +1,6 @@
+ import { Injectable, NotFoundException } from '@nestjs/common';
+ import { EventEmitter2 } from '@nestjs/event-emitter';
+-import { ClinicalEvents, EncounterCompleted } from '@/contracts/clinical.events';
++import { ClinicalEvents, EncounterCompleted, EncounterStarted } from '@/contracts/clinical.events';
+ import { Clock, eventEnvelope, newId, PersonId, PractitionerId } from '@/shared-kernel';
+ import { Encounter, EncounterRecord } from '../domain/encounter';
+ import { EncounterRepository } from '../domain/encounter.repository';
+@@ -31,6 +31,14 @@ export class EncountersService {
+     const encounter = await this.load(encounterId);
+     encounter.start(this.clock.now());
+     await this.encounters.save(encounter);
++
++    const s = encounter.toSnapshot();
++    const event: EncounterStarted = {
++      ...eventEnvelope(this.clock.now()),
++      appointmentId: s.appointmentId,
++      startedAt: (s.startedAt as Date).toISOString(),
++    };
++    await this.events.emitAsync(ClinicalEvents.EncounterStarted, event);
+     return encounter;
+   }
+ 
+diff --git a/src/modules/front-desk/api/clinical-events.listener.ts b/src/modules/front-desk/api/clinical-events.listener.ts
+new file mode 100644
+index 0000000..6cd38a9
+--- /dev/null
++++ b/src/modules/front-desk/api/clinical-events.listener.ts
+@@ -0,0 +1,14 @@
++import { Injectable } from '@nestjs/common';
++import { OnEvent } from '@nestjs/event-emitter';
++import { ClinicalEvents, EncounterStarted } from '@/contracts/clinical.events';
++import { VisitsService } from '../application/visits.service';
++
++@Injectable()
++export class ClinicalEventsListener {
++  constructor(private readonly visits: VisitsService) {}
++
++  @OnEvent(ClinicalEvents.EncounterStarted)
++  async onEncounterStarted(event: EncounterStarted): Promise<void> {
++    await this.visits.markServed(event.appointmentId, new Date(event.startedAt));
++  }
++}
+diff --git a/src/modules/front-desk/api/visits.controller.ts b/src/modules/front-desk/api/visits.controller.ts
+index e92d0fd..e6fe702 100644
+--- a/src/modules/front-desk/api/visits.controller.ts
++++ b/src/modules/front-desk/api/visits.controller.ts
+@@ -28,4 +28,14 @@ export class VisitsController {
+       return { position: index + 1, visitId: s.id, appointmentId: s.appointmentId, personId: s.personId };
+     });
+   }
++
++  @Get('queue/metrics')
++  async queueMetrics() {
++    const metrics = await this.visits.waitingMetricsToday();
++    return {
++      servedCount: metrics.servedCount,
++      averageWaitingSeconds: metrics.averageWaitingSeconds,
++      maxWaitingSeconds: metrics.maxWaitingSeconds,
++    };
++  }
+ }
+diff --git a/src/modules/front-desk/application/visits.service.spec.ts b/src/modules/front-desk/application/visits.service.spec.ts
+new file mode 100644
+index 0000000..c871fb3
+--- /dev/null
++++ b/src/modules/front-desk/application/visits.service.spec.ts
+@@ -0,0 +1,77 @@
++import { EventEmitter2 } from '@nestjs/event-emitter';
++import { FixedClock } from '@/shared-kernel';
++import { Visit } from '../domain/visit';
++import { VisitRepository } from '../domain/visit.repository';
++import { VisitsService } from './visits.service';
++
++class InMemoryVisitRepository extends VisitRepository {
++  readonly items = new Map<string, Visit>();
++
++  async findByAppointmentId(appointmentId: string) {
++    return this.items.get(appointmentId) ?? null;
++  }
++
++  async findCheckedIn() {
++    return [...this.items.values()].filter((v) => v.status === 'CHECKED_IN');
++  }
++
++  async findServedCheckedInBetween(from: Date, to: Date) {
++    return [...this.items.values()].filter((v) => {
++      const { checkedInAt, servedAt } = v.toSnapshot();
++      return servedAt !== null && checkedInAt !== null && checkedInAt >= from && checkedInAt < to;
++    });
++  }
++
++  async save(visit: Visit) {
++    this.items.set(visit.toSnapshot().appointmentId, visit);
++  }
++}
++
++describe('VisitsService waiting metrics', () => {
++  let clock: FixedClock;
++  let service: VisitsService;
++
++  beforeEach(() => {
++    clock = new FixedClock(new Date('2026-03-02T08:00:00Z'));
++    service = new VisitsService(new InMemoryVisitRepository(), clock, new EventEmitter2());
++  });
++
++  async function visit(appointmentId: string, checkIn: string, servedAt?: string) {
++    await service.expectVisitor({
++      appointmentId,
++      personId: `person-${appointmentId}`,
++      practitionerId: 'dr-1',
++      expectedAt: new Date(checkIn),
++    });
++    clock.set(new Date(checkIn));
++    await service.checkIn(appointmentId);
++    if (servedAt) {
++      await service.markServed(appointmentId, new Date(servedAt));
++    }
++  }
++
++  it('averages and maximizes the waiting time of visitors served today', async () => {
++    await visit('a', '2026-03-02T09:00:00Z', '2026-03-02T09:10:00Z');
++    await visit('b', '2026-03-02T09:30:00Z', '2026-03-02T10:00:00Z');
++    await visit('c', '2026-03-02T10:30:00Z');
++    clock.set(new Date('2026-03-02T12:00:00Z'));
++
++    const metrics = await service.waitingMetricsToday();
++
++    expect(metrics).toMatchObject({ servedCount: 2, averageWaitingSeconds: 1200, maxWaitingSeconds: 1800 });
++  });
++
++  it('excludes visitors who checked in on another day', async () => {
++    await visit('old', '2026-03-01T23:50:00Z', '2026-03-02T00:20:00Z');
++    await visit('new', '2026-03-02T09:00:00Z', '2026-03-02T09:05:00Z');
++    clock.set(new Date('2026-03-02T12:00:00Z'));
++
++    const metrics = await service.waitingMetricsToday();
++
++    expect(metrics).toMatchObject({ servedCount: 1, averageWaitingSeconds: 300, maxWaitingSeconds: 300 });
++  });
++
++  it('ignores an encounter start for an unknown appointment', async () => {
++    await expect(service.markServed('missing', new Date())).resolves.toBeUndefined();
++  });
++});
+diff --git a/src/modules/front-desk/application/visits.service.ts b/src/modules/front-desk/application/visits.service.ts
+index 74c3649..62fdb12 100644
+--- a/src/modules/front-desk/application/visits.service.ts
++++ b/src/modules/front-desk/application/visits.service.ts
+@@ -4,6 +4,7 @@ import { FrontDeskEvents, VisitorCheckedIn } from '@/contracts/front-desk.events
+ import { Clock, eventEnvelope, newId, PersonId, PractitionerId } from '@/shared-kernel';
+ import { Visit } from '../domain/visit';
+ import { VisitRepository } from '../domain/visit.repository';
++import { WaitingMetrics } from '../domain/waiting-metrics';
+ import { WaitingQueue } from '../domain/waiting-queue';
+ 
+ export interface ExpectVisitorCommand {
+@@ -58,6 +59,23 @@ export class VisitsService {
+     return visit;
+   }
+ 
++  async markServed(appointmentId: string, servedAt: Date): Promise<void> {
++    const visit = await this.visits.findByAppointmentId(appointmentId);
++    if (!visit) {
++      return;
++    }
++    visit.markServed(servedAt);
++    await this.visits.save(visit);
++  }
++
++  /** Waiting times of the visitors who checked in today (UTC day) and have since been served. */
++  async waitingMetricsToday(): Promise<WaitingMetrics> {
++    const now = this.clock.now();
++    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
++    const to = new Date(from.getTime() + 24 * 60 * 60 * 1000);
++    return WaitingMetrics.of(await this.visits.findServedCheckedInBetween(from, to));
++  }
++
+   async waitingQueue(): Promise<WaitingQueue> {
+     return WaitingQueue.of(await this.visits.findCheckedIn());
+   }
+diff --git a/src/modules/front-desk/domain/visit.repository.ts b/src/modules/front-desk/domain/visit.repository.ts
+index 7fe47b0..07ecf13 100644
+--- a/src/modules/front-desk/domain/visit.repository.ts
++++ b/src/modules/front-desk/domain/visit.repository.ts
+@@ -3,5 +3,6 @@ import type { Visit } from './visit';
+ export abstract class VisitRepository {
+   abstract findByAppointmentId(appointmentId: string): Promise<Visit | null>;
+   abstract findCheckedIn(): Promise<Visit[]>;
++  abstract findServedCheckedInBetween(from: Date, to: Date): Promise<Visit[]>;
+   abstract save(visit: Visit): Promise<void>;
+ }
+diff --git a/src/modules/front-desk/domain/visit.spec.ts b/src/modules/front-desk/domain/visit.spec.ts
+index 7394473..0110dbc 100644
+--- a/src/modules/front-desk/domain/visit.spec.ts
++++ b/src/modules/front-desk/domain/visit.spec.ts
+@@ -1,5 +1,6 @@
+ import { Visit } from './visit';
+ import { CheckInNotAllowedError, VisitAlreadyCheckedInError } from './visit.errors';
++import { WaitingMetrics } from './waiting-metrics';
+ import { WaitingQueue } from './waiting-queue';
+ 
+ function expected(id = 'v-1'): Visit {
+@@ -45,6 +46,57 @@ describe('Visit', () => {
+ 
+     expect(visit.status).toBe('CHECKED_IN');
+   });
++
++  it('measures the wait between check-in and being served', () => {
++    const visit = expected();
++    visit.checkIn(new Date('2026-03-02T09:50:00Z'));
++    expect(visit.waitingMs).toBeNull();
++
++    visit.markServed(new Date('2026-03-02T10:05:00Z'));
++
++    expect(visit.waitingMs).toBe(15 * 60_000);
++  });
++
++  it('ignores being served before check-in and keeps the first served time', () => {
++    const visit = expected();
++    visit.markServed(new Date('2026-03-02T09:00:00Z'));
++    expect(visit.servedAt).toBeNull();
++
++    visit.checkIn(new Date('2026-03-02T09:50:00Z'));
++    visit.markServed(new Date('2026-03-02T10:05:00Z'));
++    visit.markServed(new Date('2026-03-02T11:00:00Z'));
++
++    expect(visit.servedAt).toEqual(new Date('2026-03-02T10:05:00Z'));
++  });
++});
++
++describe('WaitingMetrics', () => {
++  function served(id: string, checkedIn: string, servedAt: string): Visit {
++    const visit = expected(id);
++    visit.checkIn(new Date(checkedIn));
++    visit.markServed(new Date(servedAt));
++    return visit;
++  }
++
++  it('reports count, average and maximum waiting time in seconds', () => {
++    const metrics = WaitingMetrics.of([
++      served('a', '2026-03-02T09:00:00Z', '2026-03-02T09:10:00Z'),
++      served('b', '2026-03-02T09:00:00Z', '2026-03-02T09:40:00Z'),
++    ]);
++
++    expect(metrics).toMatchObject({ servedCount: 2, averageWaitingSeconds: 1500, maxWaitingSeconds: 2400 });
++  });
++
++  it('ignores visitors still waiting and is empty when nobody was served', () => {
++    const waiting = expected('w');
++    waiting.checkIn(new Date('2026-03-02T09:00:00Z'));
++
++    expect(WaitingMetrics.of([waiting])).toMatchObject({
++      servedCount: 0,
++      averageWaitingSeconds: null,
++      maxWaitingSeconds: null,
++    });
++  });
+ });
+ 
+ describe('WaitingQueue', () => {
+diff --git a/src/modules/front-desk/domain/visit.ts b/src/modules/front-desk/domain/visit.ts
+index bd2cee1..dc4b539 100644
+--- a/src/modules/front-desk/domain/visit.ts
++++ b/src/modules/front-desk/domain/visit.ts
+@@ -11,6 +11,7 @@ export interface VisitSnapshot {
+   expectedAt: Date;
+   status: VisitStatus;
+   checkedInAt: Date | null;
++  servedAt: Date | null;
+ }
+ 
+ export interface ExpectVisitInput {
+@@ -25,7 +26,7 @@ export class Visit {
+   private constructor(private props: VisitSnapshot) {}
+ 
+   static expect(input: ExpectVisitInput): Visit {
+-    return new Visit({ ...input, status: 'EXPECTED', checkedInAt: null });
++    return new Visit({ ...input, status: 'EXPECTED', checkedInAt: null, servedAt: null });
+   }
+ 
+   static restore(snapshot: VisitSnapshot): Visit {
+@@ -44,6 +45,16 @@ export class Visit {
+     return this.props.checkedInAt;
+   }
+ 
++  get servedAt(): Date | null {
++    return this.props.servedAt;
++  }
++
++  /** Time spent waiting between check-in and being served, or null while still waiting. */
++  get waitingMs(): number | null {
++    const { checkedInAt, servedAt } = this.props;
++    return checkedInAt && servedAt ? servedAt.getTime() - checkedInAt.getTime() : null;
++  }
++
+   checkIn(now: Date): void {
+     if (this.props.status === 'CHECKED_IN') {
+       throw new VisitAlreadyCheckedInError();
+@@ -55,6 +66,14 @@ export class Visit {
+     this.props.checkedInAt = now;
+   }
+ 
++  /** Records when the visitor was called in. Ignored unless checked in and not yet served. */
++  markServed(at: Date): void {
++    if (this.props.status !== 'CHECKED_IN' || this.props.servedAt !== null) {
++      return;
++    }
++    this.props.servedAt = at;
++  }
++
+   cancel(): void {
+     if (this.props.status === 'EXPECTED') {
+       this.props.status = 'CANCELLED';
+diff --git a/src/modules/front-desk/domain/waiting-metrics.ts b/src/modules/front-desk/domain/waiting-metrics.ts
+new file mode 100644
+index 0000000..00f592b
+--- /dev/null
++++ b/src/modules/front-desk/domain/waiting-metrics.ts
+@@ -0,0 +1,18 @@
++import type { Visit } from './visit';
++
++export class WaitingMetrics {
++  private constructor(
++    readonly servedCount: number,
++    readonly averageWaitingSeconds: number | null,
++    readonly maxWaitingSeconds: number | null,
++  ) {}
++
++  static of(visits: readonly Visit[]): WaitingMetrics {
++    const waits = visits.map((visit) => visit.waitingMs).filter((ms): ms is number => ms !== null);
++    if (waits.length === 0) {
++      return new WaitingMetrics(0, null, null);
++    }
++    const average = waits.reduce((sum, ms) => sum + ms, 0) / waits.length;
++    return new WaitingMetrics(waits.length, Math.round(average / 1000), Math.round(Math.max(...waits) / 1000));
++  }
++}
+diff --git a/src/modules/front-desk/front-desk.module.ts b/src/modules/front-desk/front-desk.module.ts
+index c7b6c42..04ea661 100644
+--- a/src/modules/front-desk/front-desk.module.ts
++++ b/src/modules/front-desk/front-desk.module.ts
+@@ -1,4 +1,5 @@
+ import { Module } from '@nestjs/common';
++import { ClinicalEventsListener } from './api/clinical-events.listener';
+ import { SchedulingEventsListener } from './api/scheduling-events.listener';
+ import { VisitsController } from './api/visits.controller';
+ import { VisitsService } from './application/visits.service';
+@@ -10,6 +11,7 @@ import { PrismaVisitRepository } from './infrastructure/prisma-visit.repository'
+   providers: [
+     VisitsService,
+     SchedulingEventsListener,
++    ClinicalEventsListener,
+     { provide: VisitRepository, useClass: PrismaVisitRepository },
+   ],
+ })
+diff --git a/src/modules/front-desk/infrastructure/prisma-visit.repository.ts b/src/modules/front-desk/infrastructure/prisma-visit.repository.ts
+index 3c849f1..71316e3 100644
+--- a/src/modules/front-desk/infrastructure/prisma-visit.repository.ts
++++ b/src/modules/front-desk/infrastructure/prisma-visit.repository.ts
+@@ -20,6 +20,13 @@ export class PrismaVisitRepository extends VisitRepository {
+     return rows.map(toDomain);
+   }
+ 
++  async findServedCheckedInBetween(from: Date, to: Date): Promise<Visit[]> {
++    const rows = await this.prisma.frontDeskVisit.findMany({
++      where: { checkedInAt: { gte: from, lt: to }, servedAt: { not: null } },
++    });
++    return rows.map(toDomain);
++  }
++
+   async save(visit: Visit): Promise<void> {
+     const { id, ...data } = visit.toSnapshot();
+     await this.prisma.frontDeskVisit.upsert({ where: { id }, create: { id, ...data }, update: data });
+diff --git a/test/clinic-flow.e2e-spec.ts b/test/clinic-flow.e2e-spec.ts
+index ee466a3..3be80dc 100644
+--- a/test/clinic-flow.e2e-spec.ts
++++ b/test/clinic-flow.e2e-spec.ts
+@@ -80,6 +80,34 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+     expect(JSON.stringify(invoices.body)).not.toContain('Z00.0');
+   });
+ 
++  it('reports average and maximum waiting time of today between check-in and encounter start', async () => {
++    async function checkInAndStart(personId: string, startsAt: string, checkIn: string, start: string) {
++      const appointmentId = await scheduleAppointment(personId, startsAt);
++      clock.set(new Date(checkIn));
++      await http().post(`/front-desk/visits/${appointmentId}/check-in`).expect(200);
++      const encounter = await http().get('/clinical/encounters').query({ appointmentId }).expect(200);
++      clock.set(new Date(start));
++      await http().post(`/clinical/encounters/${encounter.body.id}/start`).expect(200);
++    }
++
++    await checkInAndStart('p-1', '2026-03-02T10:00:00.000Z', '2026-03-02T09:50:00Z', '2026-03-02T10:00:00Z');
++    await checkInAndStart('p-2', '2026-03-02T11:00:00.000Z', '2026-03-02T10:50:00Z', '2026-03-02T11:20:00Z');
++    // still waiting: does not count
++    const waitingId = await scheduleAppointment('p-3', '2026-03-02T12:00:00.000Z');
++    await http().post(`/front-desk/visits/${waitingId}/check-in`).expect(200);
++
++    clock.set(new Date('2026-03-02T13:00:00Z'));
++    const response = await http().get('/front-desk/queue/metrics').expect(200);
++
++    expect(response.body).toEqual({ servedCount: 2, averageWaitingSeconds: 1200, maxWaitingSeconds: 1800 });
++  });
++
++  it('returns empty queue metrics when nobody has been served today', async () => {
++    const response = await http().get('/front-desk/queue/metrics').expect(200);
++
++    expect(response.body).toEqual({ servedCount: 0, averageWaitingSeconds: null, maxWaitingSeconds: null });
++  });
++
+   it('cancelling an appointment prevents the check-in at the front desk', async () => {
+     const appointmentId = await scheduleAppointment('person-7');
+ 

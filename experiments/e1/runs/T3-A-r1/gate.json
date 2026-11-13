@@ -1,0 +1,43 @@
+{
+  "passed": false,
+  "durationMs": 693,
+  "dependencyCruiserMs": 693,
+  "eslintMs": 539,
+  "rulesFired": [
+    "R2"
+  ],
+  "violations": [
+    {
+      "rule": "R2",
+      "tool": "dependency-cruiser",
+      "check": "R2-contracts-only-from-upstream:billing",
+      "file": "src/modules/billing/application/invoicing.service.spec.ts",
+      "line": null,
+      "detail": "→ src/contracts/billing.events.ts"
+    },
+    {
+      "rule": "R2",
+      "tool": "eslint",
+      "check": "no-restricted-imports",
+      "file": "src/modules/billing/application/invoicing.service.spec.ts",
+      "line": 2,
+      "detail": "'@/contracts/billing.events' import is restricted from being used by a pattern. [R2] billing may only depend on the published language of itself and its upstream contexts."
+    },
+    {
+      "rule": "R2",
+      "tool": "dependency-cruiser",
+      "check": "R2-contracts-only-from-upstream:billing",
+      "file": "src/modules/billing/application/invoicing.service.ts",
+      "line": null,
+      "detail": "→ src/contracts/billing.events.ts"
+    },
+    {
+      "rule": "R2",
+      "tool": "eslint",
+      "check": "no-restricted-imports",
+      "file": "src/modules/billing/application/invoicing.service.ts",
+      "line": 3,
+      "detail": "'@/contracts/billing.events' import is restricted from being used by a pattern. [R2] billing may only depend on the published language of itself and its upstream contexts."
+    }
+  ]
+}

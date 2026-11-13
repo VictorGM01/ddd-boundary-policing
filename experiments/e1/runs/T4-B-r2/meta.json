@@ -1,0 +1,187 @@
+{
+  "runId": "T4-B-r2",
+  "plan": "main",
+  "task": "T4",
+  "arm": "B",
+  "rep": 2,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 20,
+      "outputTokens": 12972,
+      "cacheReadInputTokens": 255513,
+      "cacheCreationInputTokens": 39489,
+      "webSearchRequests": 0,
+      "costUSD": 0.3388186,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 2699,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": "CLAUDE.md"
+  },
+  "startedAt": "2026-11-12T22:54:42.935Z",
+  "finishedAt": "2026-11-12T22:56:36.615Z",
+  "wallMs": 98013,
+  "durationMs": 97031,
+  "durationApiMs": 81484,
+  "numTurns": 11,
+  "tokens": {
+    "input": 20,
+    "output": 12972,
+    "cacheRead": 255513,
+    "cacheCreation": 39489
+  },
+  "costUsd": 0.3388186,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "Check-in now returns 422 with `OverdueBalanceError` when the visitor has an invoice open for more than 30 days. `npm test` passes: 38 unit tests and 6 e2e tests. Typecheck and lint are also clean.\n\n## New context relation: `billing → front-desk`\n\nThe context map had no relation that lets front-desk know about invoices. I added it, as CLAUDE.md requires for a new relation:\n- **`context-map.json`** is new. It records the four existing relations and adds `billing` as upstream of `front-desk`.\n- **`src/contracts/billing.events.ts`** is new. It holds `InvoiceIssued { invoiceId, personId, issuedAt }`, the minimum front-desk needs.\n- **Billing** (`InvoicingService`) now emits `InvoiceIssued` through `emitAsync` after saving an invoice.\n- **Front-desk** keeps its own `OutstandingBalance` model and `FrontDeskOutstandingBalance` Prisma table. A `@OnEvent` listener fills it, and it holds no invoice or billing concepts. Handling is idempotent per invoice.\n\n## The rule\n- `VisitsService.checkIn` throws `OverdueBalanceError` if any of the person's balances is older than 30 days. \"Older\" means strictly more than 30 days, so exactly 30 days is still allowed.\n- The existing state errors (cancelled, already checked in) still take precedence. A refused check-in saves nothing and publishes no event, so clinical never sees the visitor.\n\n## Tests\n- **Unit tests:** the 30-day boundary, the service refusal paths, and billing publishing `InvoiceIssued` with only the expected fields.\n- **E2E tests:** a no-show invoice makes a check-in 31 days later return 422 `OverdueBalanceError`, and a check-in 18 days later is allowed.\n\n## Things to know\n- **Context cycle:** `front-desk → clinical → billing → front-desk` is now a cycle at the context level. There is no import cycle, because contracts only import the shared kernel. Still, please confirm that R12 is meant to allow event cycles.\n- **Balances never clear:** the invoice model has only `OPEN` and no payment flow, so a balance never goes away. Once payments exist, billing will need to publish something like `InvoiceSettled` for front-desk to remove its copy.\n- **No backfill:** invoices issued before this change aren't in front-desk's table, so they won't block anyone.\n- **Prisma client:** I ran `npx prisma generate` for the new model. Other checkouts need to run it too.",
+  "initialCommit": "c5d7ba02cc4b14320033ed58cc4707eab01cf300",
+  "filesChanged": [
+    {
+      "status": "A",
+      "path": "context-map.json"
+    },
+    {
+      "status": "M",
+      "path": "prisma/schema.prisma"
+    },
+    {
+      "status": "A",
+      "path": "src/contracts/billing.events.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/api/billing-events.listener.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/application/visits.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/application/visits.service.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/domain/outstanding-balance.repository.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/domain/outstanding-balance.spec.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/domain/outstanding-balance.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/domain/visit.errors.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/front-desk.module.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/infrastructure/prisma-outstanding-balance.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [
+    "relation declared by agent: billing → front-desk",
+    "published contract declared by agent: billing publishes billing.events.ts"
+  ],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling",
+          "billing"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": "billing.events.ts",
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": true,
+    "gateViolations": 0,
+    "rulesFired": [],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 0,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": []
+}

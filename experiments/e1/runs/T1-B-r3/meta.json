@@ -1,0 +1,183 @@
+{
+  "runId": "T1-B-r3",
+  "plan": "main",
+  "task": "T1",
+  "arm": "B",
+  "rep": 3,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 14,
+      "outputTokens": 11812,
+      "cacheReadInputTokens": 149461,
+      "cacheCreationInputTokens": 34637,
+      "webSearchRequests": 0,
+      "costUSD": 0.2865882,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 3066,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": "CLAUDE.md"
+  },
+  "startedAt": "2026-11-12T23:07:08.977Z",
+  "finishedAt": "2026-11-12T23:08:59.708Z",
+  "wallMs": 96708,
+  "durationMs": 84476,
+  "durationApiMs": 73422,
+  "numTurns": 7,
+  "tokens": {
+    "input": 14,
+    "output": 11812,
+    "cacheRead": 149461,
+    "cacheCreation": 34637
+  },
+  "costUsd": 0.2865882,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "Cancelling a charged no-show appointment with `{ \"reason\": \"clinic\", \"refund\": true }` now refunds its no-show invoice. `npm test` passes (40 unit tests and 8 e2e tests), and typecheck and lint are clean.\n\n**Why it needed more than a listener:** a no-show appointment has status `NO_SHOW`, and `cancel` only accepted `SCHEDULED`. So the cancel call used to fail with a 422 before anything reached billing.\n\n**Scheduling**\n- A new domain method, `Appointment.cancelNoShow(reason)`, moves `NO_SHOW` to `CANCELLED`. Only the reason `clinic` is allowed. Any other reason throws `NoShowCancellationNotAllowedError`, which returns a 422.\n- `AppointmentsService.cancel(id, reason, refund = false)` takes the `NO_SHOW` path for no-show appointments and publishes a new event, `AppointmentNoShowCancelled { appointmentId, personId, refund }`.\n- I did not reuse `AppointmentCancelled`, because billing isn't a declared consumer of it.\n- The controller accepts `refund?: boolean` and returns 400 if it isn't a boolean.\n- Cancelling a `SCHEDULED` appointment behaves as before. A `refund` flag there is ignored, since nothing was charged.\n\n**Billing**\n- `Invoice` has a new `REFUNDED` status and a `refund()` method. Refunding twice throws `InvoiceAlreadyRefundedError`.\n- `InvoicingService.refundNoShow` refunds the `NO_SHOW` invoice for the appointment. If there is no invoice, or it is already refunded, it does nothing. The listener only calls it when `refund` is true.\n- `PrismaInvoiceRepository.save` is now an upsert, so it can update an existing invoice. The `status` column is already a plain string, so there is no schema change.\n\n**Tests:** I added tests for the appointment domain, the scheduling service, the invoice domain and the invoicing service. I also added four e2e cases:\n- clinic cancel with refund → invoice `REFUNDED`\n- clinic cancel without refund → invoice stays `OPEN`\n- non-clinic reason → 422, invoice stays `OPEN`\n- non-boolean `refund` → 400\n\n**Context map:** I did not create or change `context-map.json`. The `scheduling → billing` relation already exists, and this adds only one more event on that same arrow, `AppointmentNoShowCancelled`, defined in `src/contracts/scheduling.events.ts`. If you want the map to list events per arrow, that event needs adding.",
+  "initialCommit": "3a9386c1558a5ec19ca65866dc0eccf025c4c60b",
+  "filesChanged": [
+    {
+      "status": "M",
+      "path": "src/contracts/scheduling.events.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/api/scheduling-events.listener.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.errors.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/infrastructure/prisma-invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/api/appointments.controller.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/application/appointments.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/application/appointments.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/domain/appointment.errors.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/domain/appointment.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/domain/appointment.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": null,
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": true,
+    "gateViolations": 0,
+    "rulesFired": [],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 0,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": []
+}

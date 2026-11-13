@@ -1,0 +1,171 @@
+{
+  "runId": "T5-B-r3",
+  "plan": "main",
+  "task": "T5",
+  "arm": "B",
+  "rep": 3,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 18,
+      "outputTokens": 9032,
+      "cacheReadInputTokens": 192765,
+      "cacheCreationInputTokens": 28275,
+      "webSearchRequests": 0,
+      "costUSD": 0.24200899999999997,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1705,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": "CLAUDE.md"
+  },
+  "startedAt": "2026-11-12T23:04:38.879Z",
+  "finishedAt": "2026-11-12T23:06:11.712Z",
+  "wallMs": 79524,
+  "durationMs": 73081,
+  "durationApiMs": 62205,
+  "numTurns": 10,
+  "tokens": {
+    "input": 18,
+    "output": 9032,
+    "cacheRead": 192765,
+    "cacheCreation": 28275
+  },
+  "costUsd": 0.24200899999999997,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "A follow-up encounter no longer pays for the `10101012` consultation again. This applies when the same payer already paid for one with the same practitioner in the previous 30 days. Other procedures on that encounter are still charged. `npm test` passes (35 unit tests and 5 e2e tests), and `typecheck` and `lint` are clean.\n\n**What changed**\n- **Contract:** `EncounterCompleted` now carries `practitionerId` (`src/contracts/clinical.events.ts`). Billing had no other way to know who the practitioner was. Clinical fills it in from its own encounter.\n- **No `context-map.json` change:** the clinical → billing relation already existed, and billing keeps its own copy of the practitioner id on the invoice.\n- **Billing storage:** `BillingInvoice` has a new optional `practitionerId` column and an index. The repository gets a `hasChargedLineSince` query, and the Prisma implementation stays in the infrastructure folder.\n- **Rule:** the 30-day window and the consultation code live in the new `src/modules/billing/domain/follow-up-policy.ts`. `InvoicingService.invoiceEncounter` drops the consultation line when the policy applies.\n\n**Behaviours to know about**\n- If the consultation was the only procedure on a follow-up, no invoice is created and `invoiceEncounter` returns `null`. An invoice can't have zero lines. As a result, `GET /billing/invoices?sourceType=ENCOUNTER&sourceId=…` returns 404 for that encounter.\n- The 30 days are counted from when the earlier invoice was issued, and day 30 is still inclusive. Only a consultation that was actually charged starts the window, so a free follow-up doesn't extend it.\n- A redelivered event for an already-invoiced encounter still raises `SourceAlreadyInvoicedError`. Without the up-front duplicate check, the encounter's own earlier consultation charge would have made it look like a follow-up.\n- Invoices that existed before this change have no practitioner stored. They can't start a follow-up window.\n\n**Tests**\n- **Unit:**\n  - Consultation waived while other procedures stay charged.\n  - Consultation-only encounter produces no invoice.\n  - Day-30 boundary, and charged again just after it.\n  - Different practitioner and different payer are both charged.\n  - A non-consultation procedure doesn't start a window.\n  - A redelivered encounter still errors.\n- **e2e:** schedule → check-in → complete twice, 14 days apart. The second invoice contains only the blood count.\n\nI haven't committed anything.",
+  "initialCommit": "e0c009f73a68cc703d62734d4317ff1007e00b1f",
+  "filesChanged": [
+    {
+      "status": "M",
+      "path": "prisma/schema.prisma"
+    },
+    {
+      "status": "M",
+      "path": "src/contracts/clinical.events.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/api/clinical-events.listener.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/billing/domain/follow-up-policy.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/price-list.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/infrastructure/prisma-invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/clinical/application/encounters.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": null,
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": true,
+    "gateViolations": 0,
+    "rulesFired": [],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 0,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": []
+}

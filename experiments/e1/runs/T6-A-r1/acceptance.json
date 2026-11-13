@@ -1,0 +1,21 @@
+{
+  "task": "T6",
+  "passed": false,
+  "numPassed": 0,
+  "numTotal": 2,
+  "exitCode": 1,
+  "timedOut": false,
+  "tests": [
+    {
+      "title": "reports average and maximum waiting time today, counting who is still waiting in the maximum",
+      "status": "failed",
+      "failure": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: true\nReceived: false\n    at Object.<anonymous> (/private/var/folders/kf/qtv1d4_s1t1344mt969pf3140000gn/T/e1-runs/main-T6-A-r1-mwe4ui4f/e1-acceptance/T6.e2e-spec.ts:41:46)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"
+    },
+    {
+      "title": "updates when an encounter starts",
+      "status": "failed",
+      "failure": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: true\nReceived: false\n    at Object.<anonymous> (/private/var/folders/kf/qtv1d4_s1t1344mt969pf3140000gn/T/e1-runs/main-T6-A-r1-mwe4ui4f/e1-acceptance/T6.e2e-spec.ts:47:73)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)"
+    }
+  ],
+  "suiteError": "  ● T6 · waiting time in the queue (acceptance) › reports average and maximum waiting time today, counting who is still waiting in the maximum\n\n    expect(received).toBe(expected) // Object.is equality\n\n    Expected: true\n    Received: false\n\n    \u001b[0m \u001b[90m 39 |\u001b[39m\n     \u001b[90m 40 |\u001b[39m     \u001b[36mconst\u001b[39m nums \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m metrics(at(\u001b[32m`${day}T13:10:00Z`\u001b[39m))\u001b[33m;\u001b[39m\n    \u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 41 |\u001b[39m     expect(matches(nums\u001b[33m,\u001b[39m [\u001b[35m30\u001b[39m\u001b[33m,\u001b[39m \u001b[35m110\u001b[39m \u001b[33m/\u001b[39m \u001b[35m3\u001b[39m]\u001b[33m,\u001b[39m \u001b[35m50\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[36mtrue\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 42 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 43 |\u001b[39m\n     \u001b[90m 44 |\u001b[39m   it(\u001b[32m'updates when an encounter starts'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.<anonymous> (e1-acceptance/T6.e2e-spec.ts:41:46)\n\n  ● T6 · waiting time in the queue (acceptance) › updates when an encounter starts\n\n    expect(received).toBe(expected) // Object.is equality\n\n    Expected: true\n    Received: false\n\n    \u001b[0m \u001b[90m 45 |\u001b[39m     \u001b[36mconst\u001b[39m day \u001b[33m=\u001b[39m \u001b[32m'2034-06-13'\u001b[39m\u001b[33m;\u001b[39m\n     \u001b[90m 46 |\u001b[39m     \u001b[36mconst\u001b[39m encounterId \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m arrive(day\u001b[33m,\u001b[39m \u001b[32m'12:00'\u001b[39m)\u001b[33m;\u001b[39m\n    \u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 47 |\u001b[39m     expect(matches(\u001b[36mawait\u001b[39m metrics(at(\u001b[32m`${day}T12:30:00Z`\u001b[39m))\u001b[33m,\u001b[39m [\u001b[35m30\u001b[39m\u001b[33m,\u001b[39m \u001b[35m0\u001b[39m]\u001b[33m,\u001b[39m \u001b[35m30\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[36mtrue\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                                                         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 48 |\u001b[39m\n     \u001b[90m 49 |\u001b[39m     \u001b[36mawait\u001b[39m startEncounter(ctx\u001b[33m,\u001b[39m encounterId\u001b[33m,\u001b[39m at(\u001b[32m`${day}T12:30:00Z`\u001b[39m))\u001b[33m;\u001b[39m\n     \u001b[90m 50 |\u001b[39m     \u001b[36mconst\u001b[39m later \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m metrics(plusMinutes(at(\u001b[32m`${day}T12:30:00Z`\u001b[39m)\u001b[33m,\u001b[39m \u001b[35m30\u001b[39m))\u001b[33m;\u001b[39m\u001b[0m\n\n      at Object.<anonymous> (e1-acceptance/T6.e2e-spec.ts:47:73)\n"
+}

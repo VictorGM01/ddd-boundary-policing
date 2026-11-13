@@ -1,0 +1,22 @@
+{
+  "passed": true,
+  "exitCode": 0,
+  "timedOut": false,
+  "ms": 4776,
+  "suites": [
+    {
+      "failed": 0,
+      "passed": 33,
+      "total": 33
+    },
+    {
+      "failed": 0,
+      "passed": 6,
+      "total": 6
+    }
+  ],
+  "typecheckPassed": true,
+  "typecheckTail": "",
+  "prismaGenerateExit": 0,
+  "outputTail": "\n> ddd-boundary-policing@0.1.0 test\n> npm run test:unit && npm run test:e2e\n\n\n> ddd-boundary-policing@0.1.0 test:unit\n> jest --config jest.config.ts\n\n\n> ddd-boundary-policing@0.1.0 test:e2e\n> jest --config test/jest-e2e.config.ts --runInBand\n\nPASS src/modules/scheduling/domain/appointment.spec.ts\nPASS src/modules/billing/domain/invoice.spec.ts\nPASS src/modules/front-desk/domain/queue-metrics.spec.ts\nPASS src/modules/front-desk/domain/visit.spec.ts\nPASS src/modules/clinical/domain/encounter.spec.ts\nPASS src/modules/billing/application/invoicing.service.spec.ts\nPASS src/modules/front-desk/application/visits.service.spec.ts\nPASS src/modules/scheduling/application/appointments.service.spec.ts\n\nTest Suites: 8 passed, 8 total\nTests:       33 passed, 33 total\nSnapshots:   0 total\nTime:        2.319 s, estimated 3 s\nRan all test suites.\nPASS test/clinic-flow.e2e-spec.ts\n  Clinic flow across the four bounded contexts (e2e)\n    ✓ schedule → check-in → complete encounter → invoice issued, only through events (39 ms)\n    ✓ exposes the average and maximum waiting time of today's queue (22 ms)\n    ✓ reports empty queue metrics when nobody was attended today (2 ms)\n    ✓ cancelling an appointment prevents the check-in at the front desk (5 ms)\n    ✓ a no-show in scheduling becomes a no-show fee invoice in billing (7 ms)\n    ✓ rejects double booking of the same practitioner slot (4 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       6 passed, 6 total\nSnapshots:   0 total\nTime:        0.706 s, estimated 2 s\nRan all test suites.\n"
+}

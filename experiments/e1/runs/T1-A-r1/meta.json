@@ -1,0 +1,191 @@
+{
+  "runId": "T1-A-r1",
+  "plan": "main",
+  "task": "T1",
+  "arm": "A",
+  "rep": 1,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 16,
+      "outputTokens": 9971,
+      "cacheReadInputTokens": 174193,
+      "cacheCreationInputTokens": 33207,
+      "webSearchRequests": 0,
+      "costUSD": 0.2674086,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1791,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": null
+  },
+  "startedAt": "2026-11-12T22:46:19.719Z",
+  "finishedAt": "2026-11-12T22:47:54.292Z",
+  "wallMs": 78569,
+  "durationMs": 77593,
+  "durationApiMs": 63510,
+  "numTurns": 8,
+  "tokens": {
+    "input": 16,
+    "output": 9971,
+    "cacheRead": 174193,
+    "cacheCreation": 33207
+  },
+  "costUsd": 0.2674086,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "A clinic cancellation with `{ \"reason\": \"clinic\", \"refund\": true }` now refunds the no-show invoice. `npm test` passes (36 unit tests, 6 e2e tests), and lint and typecheck are clean.\n\n**The cancel path changed.** A charged no-show has status `NO_SHOW`, and `Appointment.cancel` only accepted `SCHEDULED`. So the request would have failed with a 422 before any refund logic ran. A `NO_SHOW` appointment can now be cancelled only when the reason is `clinic` and `refund` is `true`. Any other cancel of a `NO_SHOW` appointment is still rejected, and the fee stays open.\n\n**How the refund happens:**\n- **Event:** `AppointmentCancelled` has a new `refundNoShowFee` field, true only for a clinic cancel with `refund: true`. A patient cancelling with `refund: true` gets no refund.\n- **Billing listener:** it reacts to that event and calls `InvoicingService.refundNoShow`. Billing and scheduling stay decoupled, as they were.\n- **Idempotent refund:** `refundNoShow` does nothing if no no-show invoice exists, so a normal clinic cancel of a scheduled appointment with `refund: true` is harmless. It does nothing on an already-refunded invoice. It also never touches an `ENCOUNTER` invoice.\n- **Invoice:** `Invoice` gets a `REFUNDED` status, a `refundedAt` timestamp and a `refund(now)` method that throws on a double refund. `GET /billing/invoices` now returns `refundedAt`.\n- **Repository:** `PrismaInvoiceRepository.save` now upserts, and on an existing invoice only the status and `refundedAt` change. I added a nullable `refundedAt` column to `BillingInvoice` in `prisma/schema.prisma`.\n\n**Tests added:**\n- **Unit tests:** the domain rules for cancelling a no-show and for refunding an invoice, the service and event payload, and `refundNoShow`. I also made the in-memory invoice repository in the spec upsert like the real one.\n- **E2E tests:** the full flow of no-show, then clinic cancel with refund, ending in a `REFUNDED` invoice. A second case checks that cancelling without `refund` returns 422 and leaves the invoice `OPEN`.\n\nI ran `npx prisma generate` locally to pick up the new column. Anyone else pulling this needs to run it too, and existing databases need `npm run db:push`. The e2e setup already runs `db push` itself.",
+  "initialCommit": "459c829316355c45482aa3920b005564213633c1",
+  "filesChanged": [
+    {
+      "status": "M",
+      "path": "prisma/schema.prisma"
+    },
+    {
+      "status": "M",
+      "path": "src/contracts/scheduling.events.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/api/invoices.controller.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/api/scheduling-events.listener.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.errors.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/infrastructure/prisma-invoice.repository.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/api/appointments.controller.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/application/appointments.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/application/appointments.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/domain/appointment.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/scheduling/domain/appointment.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": null,
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": true,
+    "gateViolations": 0,
+    "rulesFired": [],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 0,
+  "leakHits": [],
+  "outsideAccess": [],
+  "testsTouched": []
+}

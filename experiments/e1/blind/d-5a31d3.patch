@@ -1,0 +1,538 @@
+diff --git a/src/contracts/scheduling.events.ts b/src/contracts/scheduling.events.ts
+index 8dbd6f2..4af64aa 100644
+--- a/src/contracts/scheduling.events.ts
++++ b/src/contracts/scheduling.events.ts
+@@ -4,6 +4,7 @@ export const SchedulingEvents = {
+   AppointmentScheduled: 'scheduling.appointment-scheduled',
+   AppointmentCancelled: 'scheduling.appointment-cancelled',
+   AppointmentNoShow: 'scheduling.appointment-no-show',
++  AppointmentNoShowCancelled: 'scheduling.appointment-no-show-cancelled',
+ } as const;
+ 
+ export interface AppointmentScheduled extends IntegrationEvent {
+@@ -25,3 +26,9 @@ export interface AppointmentNoShow extends IntegrationEvent {
+   personId: PersonId;
+   startsAt: string;
+ }
++
++export interface AppointmentNoShowCancelled extends IntegrationEvent {
++  appointmentId: string;
++  personId: PersonId;
++  refund: boolean;
++}
+diff --git a/src/modules/billing/api/scheduling-events.listener.ts b/src/modules/billing/api/scheduling-events.listener.ts
+index 21e72b2..1967fd5 100644
+--- a/src/modules/billing/api/scheduling-events.listener.ts
++++ b/src/modules/billing/api/scheduling-events.listener.ts
+@@ -1,6 +1,6 @@
+ import { Injectable } from '@nestjs/common';
+ import { OnEvent } from '@nestjs/event-emitter';
+-import { AppointmentNoShow, SchedulingEvents } from '@/contracts/scheduling.events';
++import { AppointmentNoShow, AppointmentNoShowCancelled, SchedulingEvents } from '@/contracts/scheduling.events';
+ import { InvoicingService } from '../application/invoicing.service';
+ 
+ @Injectable()
+@@ -11,4 +11,11 @@ export class SchedulingEventsListener {
+   async onAppointmentNoShow(event: AppointmentNoShow): Promise<void> {
+     await this.invoicing.chargeNoShow({ appointmentId: event.appointmentId, payerId: event.personId });
+   }
++
++  @OnEvent(SchedulingEvents.AppointmentNoShowCancelled)
++  async onAppointmentNoShowCancelled(event: AppointmentNoShowCancelled): Promise<void> {
++    if (event.refund) {
++      await this.invoicing.refundNoShow({ appointmentId: event.appointmentId });
++    }
++  }
+ }
+diff --git a/src/modules/billing/application/invoicing.service.spec.ts b/src/modules/billing/application/invoicing.service.spec.ts
+index fd8115e..774a343 100644
+--- a/src/modules/billing/application/invoicing.service.spec.ts
++++ b/src/modules/billing/application/invoicing.service.spec.ts
+@@ -26,7 +26,9 @@ class InMemoryInvoiceRepository extends InvoiceRepository {
+   }
+ 
+   async save(invoice: Invoice) {
+-    this.items.push(invoice);
++    if (!this.items.includes(invoice)) {
++      this.items.push(invoice);
++    }
+   }
+ }
+ 
+@@ -66,4 +68,36 @@ describe('InvoicingService', () => {
+     );
+     expect(repository.items[0].totalCents).toBe(10_000);
+   });
++
++  describe('refundNoShow', () => {
++    it('refunds the no-show invoice of the appointment', async () => {
++      await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' });
++
++      await service.refundNoShow({ appointmentId: 'appt-1' });
++
++      expect(repository.items).toHaveLength(1);
++      expect(repository.items[0].status).toBe('REFUNDED');
++    });
++
++    it('does nothing when the appointment was never charged', async () => {
++      await expect(service.refundNoShow({ appointmentId: 'appt-1' })).resolves.toBeNull();
++      expect(repository.items).toHaveLength(0);
++    });
++
++    it('is idempotent for an invoice that is already refunded', async () => {
++      await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' });
++      await service.refundNoShow({ appointmentId: 'appt-1' });
++
++      await expect(service.refundNoShow({ appointmentId: 'appt-1' })).resolves.toBeDefined();
++      expect(repository.items[0].status).toBe('REFUNDED');
++    });
++
++    it('leaves encounter invoices untouched', async () => {
++      await service.invoiceEncounter({ encounterId: 'appt-1', payerId: 'person-1', procedureCodes: ['10101012'] });
++
++      await service.refundNoShow({ appointmentId: 'appt-1' });
++
++      expect(repository.items[0].status).toBe('OPEN');
++    });
++  });
+ });
+diff --git a/src/modules/billing/application/invoicing.service.ts b/src/modules/billing/application/invoicing.service.ts
+index 06680e2..7099d38 100644
+--- a/src/modules/billing/application/invoicing.service.ts
++++ b/src/modules/billing/application/invoicing.service.ts
+@@ -25,6 +25,16 @@ export class InvoicingService {
+     return this.issue(input.payerId, { type: 'NO_SHOW', id: input.appointmentId }, [this.priceList.noShowFee()]);
+   }
+ 
++  async refundNoShow(input: { appointmentId: string }): Promise<Invoice | null> {
++    const invoice = await this.invoices.findBySource({ type: 'NO_SHOW', id: input.appointmentId });
++    if (!invoice || invoice.status === 'REFUNDED') {
++      return invoice;
++    }
++    invoice.refund();
++    await this.invoices.save(invoice);
++    return invoice;
++  }
++
+   async invoicesOf(payerId: PersonId): Promise<Invoice[]> {
+     return this.invoices.findByPayer(payerId);
+   }
+diff --git a/src/modules/billing/domain/invoice.errors.ts b/src/modules/billing/domain/invoice.errors.ts
+index 006c455..83c006b 100644
+--- a/src/modules/billing/domain/invoice.errors.ts
++++ b/src/modules/billing/domain/invoice.errors.ts
+@@ -23,3 +23,9 @@ export class SourceAlreadyInvoicedError extends DomainError {
+     super(`${sourceType} ${sourceId} has already been invoiced`);
+   }
+ }
++
++export class InvoiceAlreadyRefundedError extends DomainError {
++  constructor(invoiceId: string) {
++    super(`Invoice ${invoiceId} has already been refunded`);
++  }
++}
+diff --git a/src/modules/billing/domain/invoice.spec.ts b/src/modules/billing/domain/invoice.spec.ts
+index b23ab77..303abc5 100644
+--- a/src/modules/billing/domain/invoice.spec.ts
++++ b/src/modules/billing/domain/invoice.spec.ts
+@@ -1,5 +1,10 @@
+ import { Invoice } from './invoice';
+-import { EmptyInvoiceError, InvalidLineAmountError, UnknownProcedureError } from './invoice.errors';
++import {
++  EmptyInvoiceError,
++  InvalidLineAmountError,
++  InvoiceAlreadyRefundedError,
++  UnknownProcedureError,
++} from './invoice.errors';
+ import { PriceList } from './price-list';
+ 
+ const base = {
+@@ -33,6 +38,24 @@ describe('Invoice', () => {
+   });
+ });
+ 
++describe('Invoice refund', () => {
++  it('marks an open invoice as refunded, keeping its lines and total', () => {
++    const invoice = Invoice.issue({ ...base, lines: new PriceList().linesFor(['10101012']) });
++
++    invoice.refund();
++
++    expect(invoice.status).toBe('REFUNDED');
++    expect(invoice.totalCents).toBe(25_000);
++  });
++
++  it('cannot be refunded twice', () => {
++    const invoice = Invoice.issue({ ...base, lines: new PriceList().linesFor(['10101012']) });
++    invoice.refund();
++
++    expect(() => invoice.refund()).toThrow(InvoiceAlreadyRefundedError);
++  });
++});
++
+ describe('PriceList', () => {
+   it('refuses to price an unknown procedure', () => {
+     expect(() => new PriceList().linesFor(['99999999'])).toThrow(UnknownProcedureError);
+diff --git a/src/modules/billing/domain/invoice.ts b/src/modules/billing/domain/invoice.ts
+index 24a3676..74cad05 100644
+--- a/src/modules/billing/domain/invoice.ts
++++ b/src/modules/billing/domain/invoice.ts
+@@ -1,8 +1,8 @@
+ import type { PersonId } from '@/shared-kernel';
+-import { EmptyInvoiceError, InvalidLineAmountError } from './invoice.errors';
++import { EmptyInvoiceError, InvalidLineAmountError, InvoiceAlreadyRefundedError } from './invoice.errors';
+ 
+ export type InvoiceSourceType = 'ENCOUNTER' | 'NO_SHOW';
+-export type InvoiceStatus = 'OPEN';
++export type InvoiceStatus = 'OPEN' | 'REFUNDED';
+ 
+ export interface InvoiceSource {
+   type: InvoiceSourceType;
+@@ -33,7 +33,7 @@ export interface IssueInvoiceInput {
+ }
+ 
+ export class Invoice {
+-  private constructor(private readonly props: InvoiceSnapshot) {}
++  private constructor(private props: InvoiceSnapshot) {}
+ 
+   static issue(input: IssueInvoiceInput): Invoice {
+     if (input.lines.length === 0) {
+@@ -55,10 +55,21 @@ export class Invoice {
+     return this.props.id;
+   }
+ 
++  get status(): InvoiceStatus {
++    return this.props.status;
++  }
++
+   get totalCents(): number {
+     return this.props.lines.reduce((sum, line) => sum + line.amountCents, 0);
+   }
+ 
++  refund(): void {
++    if (this.props.status === 'REFUNDED') {
++      throw new InvoiceAlreadyRefundedError(this.props.id);
++    }
++    this.props.status = 'REFUNDED';
++  }
++
+   toSnapshot(): InvoiceSnapshot {
+     return { ...this.props, source: { ...this.props.source }, lines: this.props.lines.map((l) => ({ ...l })) };
+   }
+diff --git a/src/modules/billing/infrastructure/prisma-invoice.repository.ts b/src/modules/billing/infrastructure/prisma-invoice.repository.ts
+index 83cec31..1c5abd7 100644
+--- a/src/modules/billing/infrastructure/prisma-invoice.repository.ts
++++ b/src/modules/billing/infrastructure/prisma-invoice.repository.ts
+@@ -37,8 +37,10 @@ export class PrismaInvoiceRepository extends InvoiceRepository {
+ 
+   async save(invoice: Invoice): Promise<void> {
+     const s = invoice.toSnapshot();
+-    await this.prisma.billingInvoice.create({
+-      data: {
++    await this.prisma.billingInvoice.upsert({
++      where: { id: s.id },
++      update: { status: s.status },
++      create: {
+         id: s.id,
+         payerId: s.payerId,
+         sourceType: s.source.type,
+diff --git a/src/modules/scheduling/api/appointments.controller.ts b/src/modules/scheduling/api/appointments.controller.ts
+index df020ab..0cc52d7 100644
+--- a/src/modules/scheduling/api/appointments.controller.ts
++++ b/src/modules/scheduling/api/appointments.controller.ts
+@@ -36,8 +36,11 @@ export class AppointmentsController {
+ 
+   @Post(':id/cancel')
+   @HttpCode(200)
+-  async cancel(@Param('id') id: string, @Body() body: { reason?: string }) {
+-    return toResponse(await this.appointments.cancel(id, body.reason ?? 'not informed'));
++  async cancel(@Param('id') id: string, @Body() body: { reason?: string; refund?: boolean }) {
++    if (body.refund !== undefined && typeof body.refund !== 'boolean') {
++      throw new BadRequestException('refund must be a boolean');
++    }
++    return toResponse(await this.appointments.cancel(id, body.reason ?? 'not informed', body.refund ?? false));
+   }
+ 
+   @Post(':id/no-show')
+diff --git a/src/modules/scheduling/application/appointments.service.spec.ts b/src/modules/scheduling/application/appointments.service.spec.ts
+index 3f31fe3..156105f 100644
+--- a/src/modules/scheduling/application/appointments.service.spec.ts
++++ b/src/modules/scheduling/application/appointments.service.spec.ts
+@@ -1,9 +1,9 @@
+ import { EventEmitter2 } from '@nestjs/event-emitter';
+-import { AppointmentScheduled, SchedulingEvents } from '@/contracts/scheduling.events';
++import { AppointmentNoShowCancelled, AppointmentScheduled, SchedulingEvents } from '@/contracts/scheduling.events';
+ import { FixedClock } from '@/shared-kernel';
+ import { Appointment } from '../domain/appointment';
+ import { AppointmentRepository } from '../domain/appointment.repository';
+-import { SlotUnavailableError } from '../domain/appointment.errors';
++import { InvalidAppointmentTransitionError, NoShowCancellationNotAllowedError, SlotUnavailableError } from '../domain/appointment.errors';
+ import { AppointmentsService } from './appointments.service';
+ 
+ class InMemoryAppointmentRepository extends AppointmentRepository {
+@@ -67,4 +67,55 @@ describe('AppointmentsService', () => {
+       SlotUnavailableError,
+     );
+   });
++
++  describe('cancelling a no-show appointment', () => {
++    const noShowClock = new FixedClock(new Date('2026-03-02T09:00:00Z'));
++
++    async function noShowAppointment() {
++      const appointment = await service.schedule(command);
++      noShowClock.set(new Date('2026-03-02T10:20:00Z'));
++      const late = new AppointmentsService(repository, noShowClock, events);
++      await late.markNoShow(appointment.id);
++      return { appointment, late };
++    }
++
++    it('publishes AppointmentNoShowCancelled with the refund request when the clinic cancels', async () => {
++      const published: AppointmentNoShowCancelled[] = [];
++      events.on(SchedulingEvents.AppointmentNoShowCancelled, (e: AppointmentNoShowCancelled) => published.push(e));
++      const { appointment, late } = await noShowAppointment();
++
++      await late.cancel(appointment.id, 'clinic', true);
++
++      expect(repository.items.get(appointment.id)?.status).toBe('CANCELLED');
++      expect(published).toEqual([
++        expect.objectContaining({ appointmentId: appointment.id, personId: 'person-1', refund: true }),
++      ]);
++    });
++
++    it('does not request a refund unless asked to', async () => {
++      const published: AppointmentNoShowCancelled[] = [];
++      events.on(SchedulingEvents.AppointmentNoShowCancelled, (e: AppointmentNoShowCancelled) => published.push(e));
++      const { appointment, late } = await noShowAppointment();
++
++      await late.cancel(appointment.id, 'clinic');
++
++      expect(published).toEqual([expect.objectContaining({ refund: false })]);
++    });
++
++    it('rejects cancellation of a no-show for any reason other than the clinic', async () => {
++      const { appointment, late } = await noShowAppointment();
++
++      await expect(late.cancel(appointment.id, 'sick', true)).rejects.toThrow(NoShowCancellationNotAllowedError);
++      expect(repository.items.get(appointment.id)?.status).toBe('NO_SHOW');
++    });
++
++    it('still cannot cancel an already cancelled appointment', async () => {
++      const appointment = await service.schedule(command);
++      await service.cancel(appointment.id, 'sick');
++
++      await expect(service.cancel(appointment.id, 'clinic', true)).rejects.toThrow(
++        InvalidAppointmentTransitionError,
++      );
++    });
++  });
+ });
+diff --git a/src/modules/scheduling/application/appointments.service.ts b/src/modules/scheduling/application/appointments.service.ts
+index 7d33f6b..42620b9 100644
+--- a/src/modules/scheduling/application/appointments.service.ts
++++ b/src/modules/scheduling/application/appointments.service.ts
+@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
+ import {
+   AppointmentCancelled,
+   AppointmentNoShow,
++  AppointmentNoShowCancelled,
+   AppointmentScheduled,
+   SchedulingEvents,
+ } from '@/contracts/scheduling.events';
+@@ -52,8 +53,11 @@ export class AppointmentsService {
+     return appointment;
+   }
+ 
+-  async cancel(appointmentId: string, reason: string): Promise<Appointment> {
++  async cancel(appointmentId: string, reason: string, refund = false): Promise<Appointment> {
+     const appointment = await this.load(appointmentId);
++    if (appointment.status === 'NO_SHOW') {
++      return this.cancelNoShow(appointment, reason, refund);
++    }
+     appointment.cancel(reason);
+     await this.appointments.save(appointment);
+ 
+@@ -67,6 +71,20 @@ export class AppointmentsService {
+     return appointment;
+   }
+ 
++  private async cancelNoShow(appointment: Appointment, reason: string, refund: boolean): Promise<Appointment> {
++    appointment.cancelNoShow(reason);
++    await this.appointments.save(appointment);
++
++    const event: AppointmentNoShowCancelled = {
++      ...eventEnvelope(this.clock.now()),
++      appointmentId: appointment.id,
++      personId: appointment.requester.personId,
++      refund,
++    };
++    await this.events.emitAsync(SchedulingEvents.AppointmentNoShowCancelled, event);
++    return appointment;
++  }
++
+   async markNoShow(appointmentId: string): Promise<Appointment> {
+     const appointment = await this.load(appointmentId);
+     appointment.markNoShow(this.clock.now());
+diff --git a/src/modules/scheduling/domain/appointment.errors.ts b/src/modules/scheduling/domain/appointment.errors.ts
+index 42a3b55..a88b653 100644
+--- a/src/modules/scheduling/domain/appointment.errors.ts
++++ b/src/modules/scheduling/domain/appointment.errors.ts
+@@ -18,6 +18,12 @@ export class InvalidAppointmentTransitionError extends DomainError {
+   }
+ }
+ 
++export class NoShowCancellationNotAllowedError extends DomainError {
++  constructor() {
++    super('A no-show appointment can only be cancelled by the clinic');
++  }
++}
++
+ export class NoShowBeforeStartError extends DomainError {
+   constructor() {
+     super('A no-show can only be recorded after the appointment start time');
+diff --git a/src/modules/scheduling/domain/appointment.spec.ts b/src/modules/scheduling/domain/appointment.spec.ts
+index 3a30520..ac574d8 100644
+--- a/src/modules/scheduling/domain/appointment.spec.ts
++++ b/src/modules/scheduling/domain/appointment.spec.ts
+@@ -3,6 +3,7 @@ import {
+   AppointmentInPastError,
+   InvalidAppointmentTransitionError,
+   NoShowBeforeStartError,
++  NoShowCancellationNotAllowedError,
+   SlotUnavailableError,
+ } from './appointment.errors';
+ 
+@@ -71,4 +72,31 @@ describe('Appointment', () => {
+       InvalidAppointmentTransitionError,
+     );
+   });
++
++  describe('cancelling after a no-show', () => {
++    const noShow = () => {
++      const appointment = scheduleAt('2026-03-02T10:00:00Z');
++      appointment.markNoShow(new Date('2026-03-02T10:20:00Z'));
++      return appointment;
++    };
++
++    it('lets the clinic cancel a no-show appointment', () => {
++      const appointment = noShow();
++
++      appointment.cancelNoShow('clinic');
++
++      expect(appointment.status).toBe('CANCELLED');
++      expect(appointment.toSnapshot().cancelReason).toBe('clinic');
++    });
++
++    it('refuses any other reason', () => {
++      expect(() => noShow().cancelNoShow('sick')).toThrow(NoShowCancellationNotAllowedError);
++    });
++
++    it('only applies to no-show appointments', () => {
++      expect(() => scheduleAt('2026-03-02T10:00:00Z').cancelNoShow('clinic')).toThrow(
++        InvalidAppointmentTransitionError,
++      );
++    });
++  });
+ });
+diff --git a/src/modules/scheduling/domain/appointment.ts b/src/modules/scheduling/domain/appointment.ts
+index 514cc89..a7179f4 100644
+--- a/src/modules/scheduling/domain/appointment.ts
++++ b/src/modules/scheduling/domain/appointment.ts
+@@ -3,6 +3,7 @@ import {
+   AppointmentInPastError,
+   InvalidAppointmentTransitionError,
+   NoShowBeforeStartError,
++  NoShowCancellationNotAllowedError,
+   SlotUnavailableError,
+ } from './appointment.errors';
+ 
+@@ -33,6 +34,7 @@ export interface ScheduleAppointmentInput {
+ }
+ 
+ export const DEFAULT_DURATION_MINUTES = 30;
++export const CLINIC_CANCEL_REASON = 'clinic';
+ 
+ export class Appointment {
+   private constructor(private props: AppointmentSnapshot) {}
+@@ -98,6 +100,17 @@ export class Appointment {
+     this.props.cancelReason = reason;
+   }
+ 
++  cancelNoShow(reason: string): void {
++    if (this.props.status !== 'NO_SHOW') {
++      throw new InvalidAppointmentTransitionError('cancel', this.props.status);
++    }
++    if (reason !== CLINIC_CANCEL_REASON) {
++      throw new NoShowCancellationNotAllowedError();
++    }
++    this.props.status = 'CANCELLED';
++    this.props.cancelReason = reason;
++  }
++
+   markNoShow(now: Date): void {
+     if (this.props.status !== 'SCHEDULED') {
+       throw new InvalidAppointmentTransitionError('mark as no-show', this.props.status);
+diff --git a/test/clinic-flow.e2e-spec.ts b/test/clinic-flow.e2e-spec.ts
+index ee466a3..d1d3df2 100644
+--- a/test/clinic-flow.e2e-spec.ts
++++ b/test/clinic-flow.e2e-spec.ts
+@@ -101,6 +101,61 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+     ]);
+   });
+ 
++  describe('cancelling an appointment that was charged a no-show fee', () => {
++    async function chargedNoShow(personId: string) {
++      const appointmentId = await scheduleAppointment(personId);
++      clock.set(new Date('2026-03-02T10:20:00Z'));
++      await http().post(`/scheduling/appointments/${appointmentId}/no-show`).expect(200);
++      return appointmentId;
++    }
++
++    const invoiceOf = async (appointmentId: string) =>
++      (await http().get('/billing/invoices').query({ sourceType: 'NO_SHOW', sourceId: appointmentId }).expect(200))
++        .body[0];
++
++    it('refunds the no-show invoice when the clinic cancels with refund', async () => {
++      const appointmentId = await chargedNoShow('person-11');
++      expect((await invoiceOf(appointmentId)).status).toBe('OPEN');
++
++      const response = await http()
++        .post(`/scheduling/appointments/${appointmentId}/cancel`)
++        .send({ reason: 'clinic', refund: true })
++        .expect(200);
++
++      expect(response.body).toMatchObject({ status: 'CANCELLED', cancelReason: 'clinic' });
++      expect(await invoiceOf(appointmentId)).toMatchObject({ status: 'REFUNDED', totalCents: 10_000 });
++    });
++
++    it('keeps the invoice open when the clinic cancels without refund', async () => {
++      const appointmentId = await chargedNoShow('person-12');
++
++      await http().post(`/scheduling/appointments/${appointmentId}/cancel`).send({ reason: 'clinic' }).expect(200);
++
++      expect((await invoiceOf(appointmentId)).status).toBe('OPEN');
++    });
++
++    it('does not let a non-clinic reason cancel a no-show nor refund it', async () => {
++      const appointmentId = await chargedNoShow('person-13');
++
++      const response = await http()
++        .post(`/scheduling/appointments/${appointmentId}/cancel`)
++        .send({ reason: 'sick', refund: true })
++        .expect(422);
++
++      expect(response.body.error).toBe('NoShowCancellationNotAllowedError');
++      expect((await invoiceOf(appointmentId)).status).toBe('OPEN');
++    });
++
++    it('rejects a non-boolean refund flag', async () => {
++      const appointmentId = await chargedNoShow('person-14');
++
++      await http()
++        .post(`/scheduling/appointments/${appointmentId}/cancel`)
++        .send({ reason: 'clinic', refund: 'yes' })
++        .expect(400);
++    });
++  });
++
+   it('rejects double booking of the same practitioner slot', async () => {
+     await scheduleAppointment('person-1');
+ 

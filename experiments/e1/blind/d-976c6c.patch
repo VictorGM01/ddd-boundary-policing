@@ -1,0 +1,439 @@
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 651a929..f880966 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -54,9 +54,13 @@ model BillingInvoice {
+   status     String
+   totalCents Int
+   issuedAt   DateTime
++  // Set on NO_SHOW invoices: who was booked and when the missed appointment started.
++  practitionerId String?
++  serviceAt      DateTime?
+   lines      BillingInvoiceLine[]
+ 
+   @@unique([sourceType, sourceId])
++  @@index([sourceType, serviceAt])
+ }
+ 
+ model BillingInvoiceLine {
+diff --git a/src/contracts/scheduling.events.ts b/src/contracts/scheduling.events.ts
+index 8dbd6f2..60c3602 100644
+--- a/src/contracts/scheduling.events.ts
++++ b/src/contracts/scheduling.events.ts
+@@ -23,5 +23,6 @@ export interface AppointmentCancelled extends IntegrationEvent {
+ export interface AppointmentNoShow extends IntegrationEvent {
+   appointmentId: string;
+   personId: PersonId;
++  practitionerId: PractitionerId;
+   startsAt: string;
+ }
+diff --git a/src/modules/billing/api/no-show-report.controller.ts b/src/modules/billing/api/no-show-report.controller.ts
+new file mode 100644
+index 0000000..fec2caf
+--- /dev/null
++++ b/src/modules/billing/api/no-show-report.controller.ts
+@@ -0,0 +1,36 @@
++import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
++import { InvoicingService } from '../application/invoicing.service';
++
++const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
++const DAY_MS = 24 * 60 * 60 * 1000;
++
++@Controller('reports')
++export class NoShowReportController {
++  constructor(private readonly invoicing: InvoicingService) {}
++
++  @Get('no-shows')
++  async noShows(@Query('from') from?: string, @Query('to') to?: string) {
++    const period = {
++      from: parseInstant('from', from, false),
++      to: parseInstant('to', to, true),
++    };
++    const rows = await this.invoicing.noShowReport(period);
++    return {
++      from: period.from.toISOString(),
++      to: period.to.toISOString(),
++      practitioners: rows,
++    };
++  }
++}
++
++/** Accepts an ISO timestamp or a bare date; a bare `to` date covers that whole day. */
++function parseInstant(name: string, value: string | undefined, endOfDay: boolean): Date {
++  if (!value) {
++    throw new BadRequestException(`${name} is required`);
++  }
++  const date = new Date(value);
++  if (Number.isNaN(date.getTime())) {
++    throw new BadRequestException(`${name} must be an ISO 8601 date or timestamp`);
++  }
++  return endOfDay && DATE_ONLY.test(value) ? new Date(date.getTime() + DAY_MS - 1) : date;
++}
+diff --git a/src/modules/billing/api/scheduling-events.listener.ts b/src/modules/billing/api/scheduling-events.listener.ts
+index 21e72b2..f6fff6a 100644
+--- a/src/modules/billing/api/scheduling-events.listener.ts
++++ b/src/modules/billing/api/scheduling-events.listener.ts
+@@ -9,6 +9,11 @@ export class SchedulingEventsListener {
+ 
+   @OnEvent(SchedulingEvents.AppointmentNoShow)
+   async onAppointmentNoShow(event: AppointmentNoShow): Promise<void> {
+-    await this.invoicing.chargeNoShow({ appointmentId: event.appointmentId, payerId: event.personId });
++    await this.invoicing.chargeNoShow({
++      appointmentId: event.appointmentId,
++      payerId: event.personId,
++      practitionerId: event.practitionerId,
++      startsAt: new Date(event.startsAt),
++    });
+   }
+ }
+diff --git a/src/modules/billing/application/invoicing.service.spec.ts b/src/modules/billing/application/invoicing.service.spec.ts
+index fd8115e..4fc5f38 100644
+--- a/src/modules/billing/application/invoicing.service.spec.ts
++++ b/src/modules/billing/application/invoicing.service.spec.ts
+@@ -1,6 +1,6 @@
+ import { FixedClock } from '@/shared-kernel';
+ import { Invoice, InvoiceSource } from '../domain/invoice';
+-import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
++import { InvalidReportPeriodError, SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+ import { InvoiceRepository } from '../domain/invoice.repository';
+ import { PriceList } from '../domain/price-list';
+ import { InvoicingService } from './invoicing.service';
+@@ -16,6 +16,20 @@ class InMemoryInvoiceRepository extends InvoiceRepository {
+     return this.items.filter((i) => i.toSnapshot().payerId === payerId);
+   }
+ 
++  async noShowFeesByPractitioner(from: Date, to: Date) {
++    const totals = new Map<string, { noShows: number; totalFeesCents: number }>();
++    for (const invoice of this.items) {
++      const s = invoice.toSnapshot();
++      if (s.source.type !== 'NO_SHOW' || !s.practitionerId || !s.serviceAt) continue;
++      if (s.serviceAt < from || s.serviceAt > to) continue;
++      const entry = totals.get(s.practitionerId) ?? { noShows: 0, totalFeesCents: 0 };
++      entry.noShows += 1;
++      entry.totalFeesCents += invoice.totalCents;
++      totals.set(s.practitionerId, entry);
++    }
++    return [...totals].map(([practitionerId, entry]) => ({ practitionerId, ...entry }));
++  }
++
+   async findBySource(source: InvoiceSource) {
+     return (
+       this.items.find((i) => {
+@@ -30,6 +44,13 @@ class InMemoryInvoiceRepository extends InvoiceRepository {
+   }
+ }
+ 
++const noShow = (appointmentId: string, practitionerId = 'dr-house', startsAt = '2026-03-02T10:00:00Z') => ({
++  appointmentId,
++  payerId: 'person-1',
++  practitionerId,
++  startsAt: new Date(startsAt),
++});
++
+ describe('InvoicingService', () => {
+   let repository: InMemoryInvoiceRepository;
+   let service: InvoicingService;
+@@ -59,11 +80,39 @@ describe('InvoicingService', () => {
+   });
+ 
+   it('charges the no-show fee once per appointment', async () => {
+-    await service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' });
++    await service.chargeNoShow(noShow('appt-1'));
+ 
+-    await expect(service.chargeNoShow({ appointmentId: 'appt-1', payerId: 'person-1' })).rejects.toThrow(
++    await expect(service.chargeNoShow(noShow('appt-1'))).rejects.toThrow(
+       SourceAlreadyInvoicedError,
+     );
+     expect(repository.items[0].totalCents).toBe(10_000);
+   });
++
++  describe('noShowReport', () => {
++    const march = { from: new Date('2026-03-01T00:00:00Z'), to: new Date('2026-03-31T23:59:59Z') };
++
++    it('counts no-shows and sums the fees charged per practitioner within the period', async () => {
++      await service.chargeNoShow(noShow('a-1', 'dr-house'));
++      await service.chargeNoShow(noShow('a-2', 'dr-house', '2026-03-10T10:00:00Z'));
++      await service.chargeNoShow(noShow('a-3', 'dr-wilson'));
++
++      expect(await service.noShowReport(march)).toEqual([
++        { practitionerId: 'dr-house', noShows: 2, totalFeesCents: 20_000 },
++        { practitionerId: 'dr-wilson', noShows: 1, totalFeesCents: 10_000 },
++      ]);
++    });
++
++    it('ignores no-shows outside the period and invoices that are not no-show fees', async () => {
++      await service.chargeNoShow(noShow('a-1', 'dr-house', '2026-02-27T10:00:00Z'));
++      await service.invoiceEncounter({ encounterId: 'e-1', payerId: 'person-1', procedureCodes: ['10101012'] });
++
++      expect(await service.noShowReport(march)).toEqual([]);
++    });
++
++    it('rejects a period that ends before it starts', async () => {
++      await expect(service.noShowReport({ from: march.to, to: march.from })).rejects.toThrow(
++        InvalidReportPeriodError,
++      );
++    });
++  });
+ });
+diff --git a/src/modules/billing/application/invoicing.service.ts b/src/modules/billing/application/invoicing.service.ts
+index 06680e2..59f5125 100644
+--- a/src/modules/billing/application/invoicing.service.ts
++++ b/src/modules/billing/application/invoicing.service.ts
+@@ -1,8 +1,10 @@
+ import { Injectable } from '@nestjs/common';
+-import { Clock, newId, PersonId } from '@/shared-kernel';
++import { Clock, newId, PersonId, PractitionerId } from '@/shared-kernel';
+ import { Invoice, InvoiceLine, InvoiceSource } from '../domain/invoice';
+ import { SourceAlreadyInvoicedError } from '../domain/invoice.errors';
+ import { InvoiceRepository } from '../domain/invoice.repository';
++import { InvalidReportPeriodError } from '../domain/invoice.errors';
++import type { NoShowFeesByPractitioner } from '../domain/no-show-report';
+ import { PriceList } from '../domain/price-list';
+ 
+ @Injectable()
+@@ -21,8 +23,23 @@ export class InvoicingService {
+     );
+   }
+ 
+-  async chargeNoShow(input: { appointmentId: string; payerId: PersonId }): Promise<Invoice> {
+-    return this.issue(input.payerId, { type: 'NO_SHOW', id: input.appointmentId }, [this.priceList.noShowFee()]);
++  async chargeNoShow(input: {
++    appointmentId: string;
++    payerId: PersonId;
++    practitionerId: PractitionerId;
++    startsAt: Date;
++  }): Promise<Invoice> {
++    return this.issue(input.payerId, { type: 'NO_SHOW', id: input.appointmentId }, [this.priceList.noShowFee()], {
++      practitionerId: input.practitionerId,
++      serviceAt: input.startsAt,
++    });
++  }
++
++  async noShowReport(period: { from: Date; to: Date }): Promise<NoShowFeesByPractitioner[]> {
++    if (period.from.getTime() > period.to.getTime()) {
++      throw new InvalidReportPeriodError();
++    }
++    return this.invoices.noShowFeesByPractitioner(period.from, period.to);
+   }
+ 
+   async invoicesOf(payerId: PersonId): Promise<Invoice[]> {
+@@ -33,11 +50,16 @@ export class InvoicingService {
+     return this.invoices.findBySource(source);
+   }
+ 
+-  private async issue(payerId: PersonId, source: InvoiceSource, lines: InvoiceLine[]): Promise<Invoice> {
++  private async issue(
++    payerId: PersonId,
++    source: InvoiceSource,
++    lines: InvoiceLine[],
++    attribution: { practitionerId?: PractitionerId; serviceAt?: Date } = {},
++  ): Promise<Invoice> {
+     if (await this.invoices.existsForSource(source)) {
+       throw new SourceAlreadyInvoicedError(source.type, source.id);
+     }
+-    const invoice = Invoice.issue({ id: newId(), payerId, source, lines, issuedAt: this.clock.now() });
++    const invoice = Invoice.issue({ id: newId(), payerId, source, lines, issuedAt: this.clock.now(), ...attribution });
+     await this.invoices.save(invoice);
+     return invoice;
+   }
+diff --git a/src/modules/billing/billing.module.ts b/src/modules/billing/billing.module.ts
+index 34c683b..7c3534e 100644
+--- a/src/modules/billing/billing.module.ts
++++ b/src/modules/billing/billing.module.ts
+@@ -1,6 +1,7 @@
+ import { Module } from '@nestjs/common';
+ import { ClinicalEventsListener } from './api/clinical-events.listener';
+ import { InvoicesController } from './api/invoices.controller';
++import { NoShowReportController } from './api/no-show-report.controller';
+ import { SchedulingEventsListener } from './api/scheduling-events.listener';
+ import { InvoicingService } from './application/invoicing.service';
+ import { InvoiceRepository } from './domain/invoice.repository';
+@@ -8,7 +9,7 @@ import { PriceList } from './domain/price-list';
+ import { PrismaInvoiceRepository } from './infrastructure/prisma-invoice.repository';
+ 
+ @Module({
+-  controllers: [InvoicesController],
++  controllers: [InvoicesController, NoShowReportController],
+   providers: [
+     InvoicingService,
+     ClinicalEventsListener,
+diff --git a/src/modules/billing/domain/invoice.errors.ts b/src/modules/billing/domain/invoice.errors.ts
+index 006c455..dc3c217 100644
+--- a/src/modules/billing/domain/invoice.errors.ts
++++ b/src/modules/billing/domain/invoice.errors.ts
+@@ -23,3 +23,9 @@ export class SourceAlreadyInvoicedError extends DomainError {
+     super(`${sourceType} ${sourceId} has already been invoiced`);
+   }
+ }
++
++export class InvalidReportPeriodError extends DomainError {
++  constructor() {
++    super('Report period must start before it ends');
++  }
++}
+diff --git a/src/modules/billing/domain/invoice.repository.ts b/src/modules/billing/domain/invoice.repository.ts
+index 47ca9b8..c1ddaa3 100644
+--- a/src/modules/billing/domain/invoice.repository.ts
++++ b/src/modules/billing/domain/invoice.repository.ts
+@@ -1,8 +1,11 @@
+ import type { Invoice, InvoiceSource } from './invoice';
++import type { NoShowFeesByPractitioner } from './no-show-report';
+ 
+ export abstract class InvoiceRepository {
+   abstract existsForSource(source: InvoiceSource): Promise<boolean>;
+   abstract findByPayer(payerId: string): Promise<Invoice[]>;
+   abstract findBySource(source: InvoiceSource): Promise<Invoice | null>;
+   abstract save(invoice: Invoice): Promise<void>;
++  /** NO_SHOW invoices whose appointment started in [from, to], grouped by practitioner. */
++  abstract noShowFeesByPractitioner(from: Date, to: Date): Promise<NoShowFeesByPractitioner[]>;
+ }
+diff --git a/src/modules/billing/domain/invoice.ts b/src/modules/billing/domain/invoice.ts
+index 24a3676..32eca51 100644
+--- a/src/modules/billing/domain/invoice.ts
++++ b/src/modules/billing/domain/invoice.ts
+@@ -1,4 +1,4 @@
+-import type { PersonId } from '@/shared-kernel';
++import type { PersonId, PractitionerId } from '@/shared-kernel';
+ import { EmptyInvoiceError, InvalidLineAmountError } from './invoice.errors';
+ 
+ export type InvoiceSourceType = 'ENCOUNTER' | 'NO_SHOW';
+@@ -22,6 +22,10 @@ export interface InvoiceSnapshot {
+   status: InvoiceStatus;
+   lines: InvoiceLine[];
+   issuedAt: Date;
++  /** Only for NO_SHOW invoices: the practitioner whose appointment was missed. */
++  practitionerId?: PractitionerId | null;
++  /** Only for NO_SHOW invoices: when the missed appointment was due to start. */
++  serviceAt?: Date | null;
+ }
+ 
+ export interface IssueInvoiceInput {
+@@ -30,6 +34,8 @@ export interface IssueInvoiceInput {
+   source: InvoiceSource;
+   lines: InvoiceLine[];
+   issuedAt: Date;
++  practitionerId?: PractitionerId | null;
++  serviceAt?: Date | null;
+ }
+ 
+ export class Invoice {
+diff --git a/src/modules/billing/domain/no-show-report.ts b/src/modules/billing/domain/no-show-report.ts
+new file mode 100644
+index 0000000..423ac0b
+--- /dev/null
++++ b/src/modules/billing/domain/no-show-report.ts
+@@ -0,0 +1,7 @@
++import type { PractitionerId } from '@/shared-kernel';
++
++export interface NoShowFeesByPractitioner {
++  practitionerId: PractitionerId;
++  noShows: number;
++  totalFeesCents: number;
++}
+diff --git a/src/modules/billing/infrastructure/prisma-invoice.repository.ts b/src/modules/billing/infrastructure/prisma-invoice.repository.ts
+index 83cec31..b1f4329 100644
+--- a/src/modules/billing/infrastructure/prisma-invoice.repository.ts
++++ b/src/modules/billing/infrastructure/prisma-invoice.repository.ts
+@@ -4,6 +4,7 @@ import { newId } from '@/shared-kernel';
+ import { PrismaService } from '@/infrastructure/prisma/prisma.service';
+ import { Invoice, InvoiceSource, InvoiceSourceType, InvoiceStatus } from '../domain/invoice';
+ import { InvoiceRepository } from '../domain/invoice.repository';
++import type { NoShowFeesByPractitioner } from '../domain/no-show-report';
+ 
+ @Injectable()
+ export class PrismaInvoiceRepository extends InvoiceRepository {
+@@ -35,6 +36,21 @@ export class PrismaInvoiceRepository extends InvoiceRepository {
+     return row ? toDomain(row) : null;
+   }
+ 
++  async noShowFeesByPractitioner(from: Date, to: Date): Promise<NoShowFeesByPractitioner[]> {
++    const groups = await this.prisma.billingInvoice.groupBy({
++      by: ['practitionerId'],
++      where: { sourceType: 'NO_SHOW', practitionerId: { not: null }, serviceAt: { gte: from, lte: to } },
++      _count: { _all: true },
++      _sum: { totalCents: true },
++      orderBy: { practitionerId: 'asc' },
++    });
++    return groups.map((group) => ({
++      practitionerId: group.practitionerId as string,
++      noShows: group._count._all,
++      totalFeesCents: group._sum.totalCents ?? 0,
++    }));
++  }
++
+   async save(invoice: Invoice): Promise<void> {
+     const s = invoice.toSnapshot();
+     await this.prisma.billingInvoice.create({
+@@ -46,6 +62,8 @@ export class PrismaInvoiceRepository extends InvoiceRepository {
+         status: s.status,
+         totalCents: invoice.totalCents,
+         issuedAt: s.issuedAt,
++        practitionerId: s.practitionerId ?? null,
++        serviceAt: s.serviceAt ?? null,
+         lines: { create: s.lines.map((line) => ({ id: newId(), ...line })) },
+       },
+     });
+@@ -59,6 +77,8 @@ function toDomain(row: BillingInvoice & { lines: BillingInvoiceLine[] }): Invoic
+     source: { type: row.sourceType as InvoiceSourceType, id: row.sourceId },
+     status: row.status as InvoiceStatus,
+     issuedAt: row.issuedAt,
++    practitionerId: row.practitionerId,
++    serviceAt: row.serviceAt,
+     lines: row.lines.map(({ code, description, amountCents }) => ({ code, description, amountCents })),
+   });
+ }
+diff --git a/src/modules/scheduling/application/appointments.service.ts b/src/modules/scheduling/application/appointments.service.ts
+index 7d33f6b..4bb9c70 100644
+--- a/src/modules/scheduling/application/appointments.service.ts
++++ b/src/modules/scheduling/application/appointments.service.ts
+@@ -76,6 +76,7 @@ export class AppointmentsService {
+       ...eventEnvelope(this.clock.now()),
+       appointmentId: appointment.id,
+       personId: appointment.requester.personId,
++      practitionerId: appointment.practitionerId,
+       startsAt: appointment.startsAt.toISOString(),
+     };
+     await this.events.emitAsync(SchedulingEvents.AppointmentNoShow, event);
+diff --git a/test/clinic-flow.e2e-spec.ts b/test/clinic-flow.e2e-spec.ts
+index ee466a3..5b063fd 100644
+--- a/test/clinic-flow.e2e-spec.ts
++++ b/test/clinic-flow.e2e-spec.ts
+@@ -101,6 +101,38 @@ describe('Clinic flow across the four bounded contexts (e2e)', () => {
+     ]);
+   });
+ 
++  it('reports no-shows and no-show fees per practitioner for a period', async () => {
++    const noShow = async (practitionerId: string, personId: string, startsAt: string) => {
++      const created = await http()
++        .post('/scheduling/appointments')
++        .send({ practitionerId, startsAt, requester: { personId, name: 'Ana Souza', phone: '11999990000' } })
++        .expect(201);
++      clock.set(new Date(new Date(startsAt).getTime() + 15 * 60_000));
++      await http().post(`/scheduling/appointments/${created.body.id}/no-show`).expect(200);
++      clock.set(new Date('2026-03-02T08:00:00Z'));
++    };
++    await noShow('dr-house', 'person-1', '2026-03-02T10:00:00.000Z');
++    await noShow('dr-house', 'person-2', '2026-03-03T10:00:00.000Z');
++    await noShow('dr-wilson', 'person-3', '2026-03-03T11:00:00.000Z');
++    await noShow('dr-wilson', 'person-4', '2026-03-20T11:00:00.000Z');
++
++    const response = await http()
++      .get('/reports/no-shows')
++      .query({ from: '2026-03-01', to: '2026-03-03' })
++      .expect(200);
++    expect(response.body.practitioners).toEqual([
++      { practitionerId: 'dr-house', noShows: 2, totalFeesCents: 20_000 },
++      { practitionerId: 'dr-wilson', noShows: 1, totalFeesCents: 10_000 },
++    ]);
++  });
++
++  it('validates the period of the no-show report', async () => {
++    await http().get('/reports/no-shows').query({ from: '2026-03-01' }).expect(400);
++    await http().get('/reports/no-shows').query({ from: 'nope', to: '2026-03-03' }).expect(400);
++    const inverted = await http().get('/reports/no-shows').query({ from: '2026-03-05', to: '2026-03-03' }).expect(422);
++    expect(inverted.body.error).toBe('InvalidReportPeriodError');
++  });
++
+   it('rejects double booking of the same practitioner slot', async () => {
+     await scheduleAppointment('person-1');
+ 

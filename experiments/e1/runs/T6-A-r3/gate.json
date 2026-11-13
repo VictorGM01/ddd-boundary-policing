@@ -1,0 +1,27 @@
+{
+  "passed": false,
+  "durationMs": 621,
+  "dependencyCruiserMs": 621,
+  "eslintMs": 475,
+  "rulesFired": [
+    "R2"
+  ],
+  "violations": [
+    {
+      "rule": "R2",
+      "tool": "dependency-cruiser",
+      "check": "R2-contracts-only-from-upstream:front-desk",
+      "file": "src/modules/front-desk/api/clinical-events.listener.ts",
+      "line": null,
+      "detail": "→ src/contracts/clinical.events.ts"
+    },
+    {
+      "rule": "R2",
+      "tool": "eslint",
+      "check": "no-restricted-imports",
+      "file": "src/modules/front-desk/api/clinical-events.listener.ts",
+      "line": 3,
+      "detail": "'@/contracts/clinical.events' import is restricted from being used by a pattern. [R2] front-desk may only depend on the published language of itself and its upstream contexts."
+    }
+  ]
+}

@@ -1,0 +1,1116 @@
+{
+  "plan": "main",
+  "seed": 20261112,
+  "spec": {
+    "tasks": [
+      "T1",
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+      "T6"
+    ],
+    "arms": [
+      "A",
+      "B"
+    ],
+    "reps": 3,
+    "seed": 20261112
+  },
+  "createdAt": "2026-11-12T22:40:40.234Z",
+  "startedAt": "2026-11-12T22:40:40.235Z",
+  "finishedAt": "2026-11-13T12:07:01.524Z",
+  "pauses": [],
+  "runs": {
+    "T5-A-r1": {
+      "runId": "T5-A-r1",
+      "task": "T5",
+      "arm": "A",
+      "rep": 1,
+      "order": 0,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "interrupted",
+          "at": "2026-11-12T22:41:41.762Z"
+        },
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:43:52.331Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:41:46.721Z",
+      "finishedAt": "2026-11-12T22:43:52.331Z",
+      "costUsd": 0.333115
+    },
+    "T6-A-r1": {
+      "runId": "T6-A-r1",
+      "task": "T6",
+      "arm": "A",
+      "rep": 1,
+      "order": 1,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "interrupted",
+          "at": "2026-11-12T22:41:41.764Z"
+        },
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:43:11.072Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:41:52.958Z",
+      "finishedAt": "2026-11-12T22:43:11.072Z",
+      "costUsd": 0.18829759999999998
+    },
+    "T5-B-r1": {
+      "runId": "T5-B-r1",
+      "task": "T5",
+      "arm": "B",
+      "rep": 1,
+      "order": 2,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:44:36.968Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:43:11.072Z",
+      "finishedAt": "2026-11-12T22:44:36.968Z",
+      "costUsd": 0.23076180000000002
+    },
+    "T2-A-r1": {
+      "runId": "T2-A-r1",
+      "task": "T2",
+      "arm": "A",
+      "rep": 1,
+      "order": 3,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:45:16.785Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:43:52.331Z",
+      "finishedAt": "2026-11-12T22:45:16.785Z",
+      "costUsd": 0.23191899999999996
+    },
+    "T3-A-r1": {
+      "runId": "T3-A-r1",
+      "task": "T3",
+      "arm": "A",
+      "rep": 1,
+      "order": 4,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:46:19.717Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:44:36.968Z",
+      "finishedAt": "2026-11-12T22:46:19.717Z",
+      "costUsd": 0.2788314
+    },
+    "T3-B-r1": {
+      "runId": "T3-B-r1",
+      "task": "T3",
+      "arm": "B",
+      "rep": 1,
+      "order": 5,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:46:56.035Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:45:16.785Z",
+      "finishedAt": "2026-11-12T22:46:56.035Z",
+      "costUsd": 0.2568796
+    },
+    "T1-A-r1": {
+      "runId": "T1-A-r1",
+      "task": "T1",
+      "arm": "A",
+      "rep": 1,
+      "order": 6,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:47:57.047Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:46:19.718Z",
+      "finishedAt": "2026-11-12T22:47:57.047Z",
+      "costUsd": 0.2674086
+    },
+    "T1-B-r1": {
+      "runId": "T1-B-r1",
+      "task": "T1",
+      "arm": "B",
+      "rep": 1,
+      "order": 7,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:48:26.422Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:46:56.036Z",
+      "finishedAt": "2026-11-12T22:48:26.422Z",
+      "costUsd": 0.2611508
+    },
+    "T4-A-r1": {
+      "runId": "T4-A-r1",
+      "task": "T4",
+      "arm": "A",
+      "rep": 1,
+      "order": 8,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:49:36.705Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:47:57.047Z",
+      "finishedAt": "2026-11-12T22:49:36.705Z",
+      "costUsd": 0.24189159999999998
+    },
+    "T4-B-r1": {
+      "runId": "T4-B-r1",
+      "task": "T4",
+      "arm": "B",
+      "rep": 1,
+      "order": 9,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:50:37.848Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:48:26.422Z",
+      "finishedAt": "2026-11-12T22:50:37.848Z",
+      "costUsd": 0.3490798
+    },
+    "T2-B-r1": {
+      "runId": "T2-B-r1",
+      "task": "T2",
+      "arm": "B",
+      "rep": 1,
+      "order": 10,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:51:02.275Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:49:36.706Z",
+      "finishedAt": "2026-11-12T22:51:02.275Z",
+      "costUsd": 0.2242968
+    },
+    "T6-B-r1": {
+      "runId": "T6-B-r1",
+      "task": "T6",
+      "arm": "B",
+      "rep": 1,
+      "order": 11,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:52:12.616Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:50:37.855Z",
+      "finishedAt": "2026-11-12T22:52:12.616Z",
+      "costUsd": 0.25022560000000005
+    },
+    "T3-A-r2": {
+      "runId": "T3-A-r2",
+      "task": "T3",
+      "arm": "A",
+      "rep": 2,
+      "order": 12,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:52:42.167Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:51:02.276Z",
+      "finishedAt": "2026-11-12T22:52:42.167Z",
+      "costUsd": 0.2805202
+    },
+    "T4-A-r2": {
+      "runId": "T4-A-r2",
+      "task": "T4",
+      "arm": "A",
+      "rep": 2,
+      "order": 13,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:53:48.437Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:52:12.616Z",
+      "finishedAt": "2026-11-12T22:53:48.437Z",
+      "costUsd": 0.24951860000000003
+    },
+    "T5-A-r2": {
+      "runId": "T5-A-r2",
+      "task": "T5",
+      "arm": "A",
+      "rep": 2,
+      "order": 14,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:54:42.934Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:52:42.168Z",
+      "finishedAt": "2026-11-12T22:54:42.934Z",
+      "costUsd": 0.3100692
+    },
+    "T6-A-r2": {
+      "runId": "T6-A-r2",
+      "task": "T6",
+      "arm": "A",
+      "rep": 2,
+      "order": 15,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:55:07.052Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:53:48.437Z",
+      "finishedAt": "2026-11-12T22:55:07.052Z",
+      "costUsd": 0.19405019999999998
+    },
+    "T4-B-r2": {
+      "runId": "T4-B-r2",
+      "task": "T4",
+      "arm": "B",
+      "rep": 2,
+      "order": 16,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:56:39.264Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:54:42.934Z",
+      "finishedAt": "2026-11-12T22:56:39.264Z",
+      "costUsd": 0.3388186
+    },
+    "T2-A-r2": {
+      "runId": "T2-A-r2",
+      "task": "T2",
+      "arm": "A",
+      "rep": 2,
+      "order": 17,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:57:10.488Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:55:07.053Z",
+      "finishedAt": "2026-11-12T22:57:10.488Z",
+      "costUsd": 0.44901519999999995
+    },
+    "T1-A-r2": {
+      "runId": "T1-A-r2",
+      "task": "T1",
+      "arm": "A",
+      "rep": 2,
+      "order": 18,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:58:08.340Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:56:39.265Z",
+      "finishedAt": "2026-11-12T22:58:08.340Z",
+      "costUsd": 0.24619679999999997
+    },
+    "T1-B-r2": {
+      "runId": "T1-B-r2",
+      "task": "T1",
+      "arm": "B",
+      "rep": 2,
+      "order": 19,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:58:50.846Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:57:10.488Z",
+      "finishedAt": "2026-11-12T22:58:50.846Z",
+      "costUsd": 0.294103
+    },
+    "T2-B-r2": {
+      "runId": "T2-B-r2",
+      "task": "T2",
+      "arm": "B",
+      "rep": 2,
+      "order": 20,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T22:59:24.384Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:58:08.340Z",
+      "finishedAt": "2026-11-12T22:59:24.384Z",
+      "costUsd": 0.22394020000000003
+    },
+    "T6-B-r2": {
+      "runId": "T6-B-r2",
+      "task": "T6",
+      "arm": "B",
+      "rep": 2,
+      "order": 21,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:00:23.048Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:58:50.846Z",
+      "finishedAt": "2026-11-12T23:00:23.048Z",
+      "costUsd": 0.22678520000000002
+    },
+    "T3-B-r2": {
+      "runId": "T3-B-r2",
+      "task": "T3",
+      "arm": "B",
+      "rep": 2,
+      "order": 22,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:01:00.762Z"
+        }
+      ],
+      "startedAt": "2026-11-12T22:59:24.384Z",
+      "finishedAt": "2026-11-12T23:01:00.762Z",
+      "costUsd": 0.255212
+    },
+    "T5-B-r2": {
+      "runId": "T5-B-r2",
+      "task": "T5",
+      "arm": "B",
+      "rep": 2,
+      "order": 23,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:01:53.202Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:00:23.049Z",
+      "finishedAt": "2026-11-12T23:01:53.202Z",
+      "costUsd": 0.2301274
+    },
+    "T6-B-r3": {
+      "runId": "T6-B-r3",
+      "task": "T6",
+      "arm": "B",
+      "rep": 3,
+      "order": 24,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:02:38.735Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:01:00.762Z",
+      "finishedAt": "2026-11-12T23:02:38.735Z",
+      "costUsd": 0.2755086
+    },
+    "T2-A-r3": {
+      "runId": "T2-A-r3",
+      "task": "T2",
+      "arm": "A",
+      "rep": 3,
+      "order": 25,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:03:11.487Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:01:53.202Z",
+      "finishedAt": "2026-11-12T23:03:11.487Z",
+      "costUsd": 0.20836880000000002
+    },
+    "T3-B-r3": {
+      "runId": "T3-B-r3",
+      "task": "T3",
+      "arm": "B",
+      "rep": 3,
+      "order": 26,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:04:18.981Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:02:38.735Z",
+      "finishedAt": "2026-11-12T23:04:18.981Z",
+      "costUsd": 0.2480562
+    },
+    "T5-A-r3": {
+      "runId": "T5-A-r3",
+      "task": "T5",
+      "arm": "A",
+      "rep": 3,
+      "order": 27,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:04:38.878Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:03:11.487Z",
+      "finishedAt": "2026-11-12T23:04:38.878Z",
+      "costUsd": 0.23036500000000001
+    },
+    "T2-B-r3": {
+      "runId": "T2-B-r3",
+      "task": "T2",
+      "arm": "B",
+      "rep": 3,
+      "order": 28,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:05:58.341Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:04:18.982Z",
+      "finishedAt": "2026-11-12T23:05:58.341Z",
+      "costUsd": 0.30002100000000004
+    },
+    "T5-B-r3": {
+      "runId": "T5-B-r3",
+      "task": "T5",
+      "arm": "B",
+      "rep": 3,
+      "order": 29,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:06:13.438Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:04:38.879Z",
+      "finishedAt": "2026-11-12T23:06:13.438Z",
+      "costUsd": 0.24200899999999997
+    },
+    "T6-A-r3": {
+      "runId": "T6-A-r3",
+      "task": "T6",
+      "arm": "A",
+      "rep": 3,
+      "order": 30,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:07:08.976Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:05:58.341Z",
+      "finishedAt": "2026-11-12T23:07:08.976Z",
+      "costUsd": 0.1939012
+    },
+    "T1-A-r3": {
+      "runId": "T1-A-r3",
+      "task": "T1",
+      "arm": "A",
+      "rep": 3,
+      "order": 31,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:07:30.928Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:06:13.438Z",
+      "finishedAt": "2026-11-12T23:07:30.928Z",
+      "costUsd": 0.22631999999999997
+    },
+    "T1-B-r3": {
+      "runId": "T1-B-r3",
+      "task": "T1",
+      "arm": "B",
+      "rep": 3,
+      "order": 32,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:09:01.449Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:07:08.977Z",
+      "finishedAt": "2026-11-12T23:09:01.449Z",
+      "costUsd": 0.2865882
+    },
+    "T4-A-r3": {
+      "runId": "T4-A-r3",
+      "task": "T4",
+      "arm": "A",
+      "rep": 3,
+      "order": 33,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:08:46.141Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:07:30.928Z",
+      "finishedAt": "2026-11-12T23:08:46.141Z",
+      "costUsd": 0.2084096
+    },
+    "T4-B-r3": {
+      "runId": "T4-B-r3",
+      "task": "T4",
+      "arm": "B",
+      "rep": 3,
+      "order": 34,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:10:26.680Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:08:46.141Z",
+      "finishedAt": "2026-11-12T23:10:26.680Z",
+      "costUsd": 0.3022916
+    },
+    "T3-A-r3": {
+      "runId": "T3-A-r3",
+      "task": "T3",
+      "arm": "A",
+      "rep": 3,
+      "order": 35,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-12T23:10:40.607Z"
+        }
+      ],
+      "startedAt": "2026-11-12T23:09:01.449Z",
+      "finishedAt": "2026-11-12T23:10:40.607Z",
+      "costUsd": 0.2733752
+    },
+    "T5-C-r1": {
+      "runId": "T5-C-r1",
+      "task": "T5",
+      "arm": "C",
+      "rep": 1,
+      "order": 36,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T11:53:15.769Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:51:24.549Z",
+      "finishedAt": "2026-11-13T11:53:15.769Z",
+      "costUsd": 0.269042
+    },
+    "T1-C-r1": {
+      "runId": "T1-C-r1",
+      "task": "T1",
+      "arm": "C",
+      "rep": 1,
+      "order": 37,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T11:52:57.914Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:51:30.952Z",
+      "finishedAt": "2026-11-13T11:52:57.914Z",
+      "costUsd": 0.2748508
+    },
+    "T4-C-r1": {
+      "runId": "T4-C-r1",
+      "task": "T4",
+      "arm": "C",
+      "rep": 1,
+      "order": 38,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T11:55:00.157Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:52:57.914Z",
+      "finishedAt": "2026-11-13T11:55:00.157Z",
+      "costUsd": 0.33264760000000004
+    },
+    "T3-C-r1": {
+      "runId": "T3-C-r1",
+      "task": "T3",
+      "arm": "C",
+      "rep": 1,
+      "order": 39,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T11:55:18.755Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:53:15.787Z",
+      "finishedAt": "2026-11-13T11:55:18.755Z",
+      "costUsd": 0.2674584
+    },
+    "T2-C-r1": {
+      "runId": "T2-C-r1",
+      "task": "T2",
+      "arm": "C",
+      "rep": 1,
+      "order": 40,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T11:56:44.859Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:55:00.158Z",
+      "finishedAt": "2026-11-13T11:56:44.859Z",
+      "costUsd": 0.26283
+    },
+    "T6-C-r1": {
+      "runId": "T6-C-r1",
+      "task": "T6",
+      "arm": "C",
+      "rep": 1,
+      "order": 41,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T11:57:04.545Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:55:18.756Z",
+      "finishedAt": "2026-11-13T11:57:04.545Z",
+      "costUsd": 0.27594179999999996
+    },
+    "T3-C-r2": {
+      "runId": "T3-C-r2",
+      "task": "T3",
+      "arm": "C",
+      "rep": 2,
+      "order": 42,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T11:58:27.684Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:56:44.859Z",
+      "finishedAt": "2026-11-13T11:58:27.684Z",
+      "costUsd": 0.27369220000000005
+    },
+    "T6-C-r2": {
+      "runId": "T6-C-r2",
+      "task": "T6",
+      "arm": "C",
+      "rep": 2,
+      "order": 43,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T11:58:46.785Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:57:04.546Z",
+      "finishedAt": "2026-11-13T11:58:46.785Z",
+      "costUsd": 0.2556178
+    },
+    "T2-C-r2": {
+      "runId": "T2-C-r2",
+      "task": "T2",
+      "arm": "C",
+      "rep": 2,
+      "order": 44,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:00:46.185Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:58:27.685Z",
+      "finishedAt": "2026-11-13T12:00:46.185Z",
+      "costUsd": 0.40948
+    },
+    "T4-C-r2": {
+      "runId": "T4-C-r2",
+      "task": "T4",
+      "arm": "C",
+      "rep": 2,
+      "order": 45,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:00:27.128Z"
+        }
+      ],
+      "startedAt": "2026-11-13T11:58:46.785Z",
+      "finishedAt": "2026-11-13T12:00:27.128Z",
+      "costUsd": 0.2926158
+    },
+    "T5-C-r2": {
+      "runId": "T5-C-r2",
+      "task": "T5",
+      "arm": "C",
+      "rep": 2,
+      "order": 46,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:01:59.728Z"
+        }
+      ],
+      "startedAt": "2026-11-13T12:00:27.128Z",
+      "finishedAt": "2026-11-13T12:01:59.728Z",
+      "costUsd": 0.19933240000000002
+    },
+    "T1-C-r2": {
+      "runId": "T1-C-r2",
+      "task": "T1",
+      "arm": "C",
+      "rep": 2,
+      "order": 47,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:02:18.376Z"
+        }
+      ],
+      "startedAt": "2026-11-13T12:00:46.185Z",
+      "finishedAt": "2026-11-13T12:02:18.376Z",
+      "costUsd": 0.2496388
+    },
+    "T6-C-r3": {
+      "runId": "T6-C-r3",
+      "task": "T6",
+      "arm": "C",
+      "rep": 3,
+      "order": 48,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:03:35.645Z"
+        }
+      ],
+      "startedAt": "2026-11-13T12:01:59.731Z",
+      "finishedAt": "2026-11-13T12:03:35.645Z",
+      "costUsd": 0.2345538
+    },
+    "T1-C-r3": {
+      "runId": "T1-C-r3",
+      "task": "T1",
+      "arm": "C",
+      "rep": 3,
+      "order": 49,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:03:53.408Z"
+        }
+      ],
+      "startedAt": "2026-11-13T12:02:18.377Z",
+      "finishedAt": "2026-11-13T12:03:53.408Z",
+      "costUsd": 0.23919040000000003
+    },
+    "T3-C-r3": {
+      "runId": "T3-C-r3",
+      "task": "T3",
+      "arm": "C",
+      "rep": 3,
+      "order": 50,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:05:09.689Z"
+        }
+      ],
+      "startedAt": "2026-11-13T12:03:35.645Z",
+      "finishedAt": "2026-11-13T12:05:09.689Z",
+      "costUsd": 0.229871
+    },
+    "T2-C-r3": {
+      "runId": "T2-C-r3",
+      "task": "T2",
+      "arm": "C",
+      "rep": 3,
+      "order": 51,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:05:27.797Z"
+        }
+      ],
+      "startedAt": "2026-11-13T12:03:53.409Z",
+      "finishedAt": "2026-11-13T12:05:27.797Z",
+      "costUsd": 0.219505
+    },
+    "T4-C-r3": {
+      "runId": "T4-C-r3",
+      "task": "T4",
+      "arm": "C",
+      "rep": 3,
+      "order": 52,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:06:49.340Z"
+        }
+      ],
+      "startedAt": "2026-11-13T12:05:09.690Z",
+      "finishedAt": "2026-11-13T12:06:49.340Z",
+      "costUsd": 0.27238100000000004
+    },
+    "T5-C-r3": {
+      "runId": "T5-C-r3",
+      "task": "T5",
+      "arm": "C",
+      "rep": 3,
+      "order": 53,
+      "status": "done",
+      "attempts": 1,
+      "failures": 0,
+      "history": [
+        {
+          "attempt": 1,
+          "outcome": "done",
+          "at": "2026-11-13T12:07:01.523Z"
+        }
+      ],
+      "startedAt": "2026-11-13T12:05:27.800Z",
+      "finishedAt": "2026-11-13T12:07:01.523Z",
+      "costUsd": 0.22833520000000002
+    }
+  }
+}

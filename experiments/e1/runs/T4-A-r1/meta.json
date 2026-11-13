@@ -1,0 +1,169 @@
+{
+  "runId": "T4-A-r1",
+  "plan": "main",
+  "task": "T4",
+  "arm": "A",
+  "rep": 1,
+  "attempt": 1,
+  "modelRequested": "claude-sonnet-5-5",
+  "modelsUsed": [
+    "claude-sonnet-5-5"
+  ],
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 20,
+      "outputTokens": 8393,
+      "cacheReadInputTokens": 213908,
+      "cacheCreationInputTokens": 28785,
+      "webSearchRequests": 0,
+      "costUSD": 0.24189159999999998,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1773,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "effort": "high",
+  "maxTurns": 40,
+  "timeoutMs": 1200000,
+  "claudeCodeVersion": "2.1.285",
+  "isolation": {
+    "flags": [
+      "--setting-sources",
+      "project",
+      "--disable-slash-commands",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "{\"mcpServers\":{}}",
+      "--no-session-persistence",
+      "--permission-mode",
+      "bypassPermissions",
+      "--disallowedTools",
+      "WebFetch,WebSearch,RemoteTrigger,PushNotification,CronCreate,ScheduleWakeup,Workflow,DesignSync"
+    ],
+    "skillsLoaded": [],
+    "mcpServers": [],
+    "slashCommands": [],
+    "plugins": [
+      "cc-plugin-agents-md",
+      "cc-plugin-telemetry"
+    ],
+    "permissionMode": "bypassPermissions",
+    "apiKeySource": "none",
+    "instructionsFile": null
+  },
+  "startedAt": "2026-11-12T22:47:57.048Z",
+  "finishedAt": "2026-11-12T22:49:33.720Z",
+  "wallMs": 79699,
+  "durationMs": 78659,
+  "durationApiMs": 58415,
+  "numTurns": 11,
+  "tokens": {
+    "input": 20,
+    "output": 8393,
+    "cacheRead": 213908,
+    "cacheCreation": 28785
+  },
+  "costUsd": 0.24189159999999998,
+  "exitCode": 0,
+  "stopReason": "success",
+  "terminalReason": "completed",
+  "resultText": "Check-in now returns 422 with `OverdueBalanceError` when the visitor has an open invoice older than 30 days. `npm test` passes (37 unit tests and 6 e2e tests), and `tsc` and `eslint` are clean. I haven't committed anything.\n\n**How it works**\n- **Overdue rule:** it lives in billing. `Invoice.isOverdue(now)` is true for an `OPEN` invoice issued more than 30 days before `now`, so day 30 exactly is still allowed.\n- **Cross-context call:** front desk can't import billing code, so I added a small contract, `OverdueBalanceQuery` in `src/contracts/billing.queries.ts`. `BillingModule` provides it and is marked `@Global()`, following the `SharedKernelModule` pattern, so `FrontDeskModule` doesn't import billing.\n- **Check-in:** `VisitsService.checkIn` first validates the visit state (cancelled and already-checked-in visits keep their current errors). It then asks the query and throws `OverdueBalanceError` if there's an overdue invoice. The error is a `DomainError`, so the existing filter maps it to 422. A refused check-in saves nothing and emits no `VisitorCheckedIn` event.\n\n**Tests added**\n- **Invoice rule:** a unit test covering the day-30 boundary.\n- **Billing service:** `InvoicingService.hasOverdueBalance`, including that other payers' invoices don't count.\n- **Front-desk service:** a new `visits.service.spec.ts`, including that a refused check-in leaves the visit `EXPECTED` and emits no event.\n- **End-to-end:** an old no-show invoice gives 422 `OverdueBalanceError` and an empty queue. A recent one still gives 200.\n\nInvoices have no paid state yet and are always `OPEN`, so every invoice older than 30 days counts as overdue. When payment exists, `isOverdue` will need to look at that status.",
+  "initialCommit": "d2469591680fcc334a8d4e0fef5274955f7afefb",
+  "filesChanged": [
+    {
+      "status": "A",
+      "path": "src/contracts/billing.queries.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/application/invoicing.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/billing.module.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/billing/domain/invoice.ts"
+    },
+    {
+      "status": "A",
+      "path": "src/modules/front-desk/application/visits.service.spec.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/application/visits.service.ts"
+    },
+    {
+      "status": "M",
+      "path": "src/modules/front-desk/domain/visit.errors.ts"
+    },
+    {
+      "status": "M",
+      "path": "test/clinic-flow.e2e-spec.ts"
+    }
+  ],
+  "lockfileChanged": false,
+  "restoreNotes": [],
+  "contextMapAfterMerge": {
+    "contexts": {
+      "scheduling": {
+        "prismaPrefix": "Scheduling",
+        "publishes": "scheduling.events.ts",
+        "upstream": []
+      },
+      "front-desk": {
+        "prismaPrefix": "FrontDesk",
+        "publishes": "front-desk.events.ts",
+        "upstream": [
+          "scheduling"
+        ]
+      },
+      "clinical": {
+        "prismaPrefix": "Clinical",
+        "publishes": "clinical.events.ts",
+        "upstream": [
+          "front-desk"
+        ]
+      },
+      "billing": {
+        "prismaPrefix": "Billing",
+        "publishes": null,
+        "upstream": [
+          "clinical",
+          "scheduling"
+        ]
+      }
+    }
+  },
+  "evaluation": {
+    "gatePassed": false,
+    "gateViolations": 7,
+    "rulesFired": [
+      "R2",
+      "R9"
+    ],
+    "testsPassed": true,
+    "typecheckPassed": true,
+    "acceptancePassed": true,
+    "acceptance": "3/3"
+  },
+  "gateRunsByAgent": 0,
+  "leakHits": [
+    " infrastructure/*.ts; cd ../../..; cat test/clinic-flow.e2e-spec.ts; ls -a; cat .dependency-cruiser* 2>/dev/null | head -50\"},\"caller\":{\"type\":\"direct\"}}],\"cont",
+    "sma\\nsrc\\ntest\\ntsconfig.build.json\\ntsconfig.json\\n(eval):1: no matches found: .dependency-cruiser*\",\"is_error\":false}]},\"parent_tool_use_id\":null,\"session_id\""
+  ],
+  "outsideAccess": [],
+  "testsTouched": []
+}

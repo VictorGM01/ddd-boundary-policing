@@ -1,12 +1,13 @@
 # Experimento E1
 
-Um agente de IA (Claude Code headless, `claude-sonnet-5-5`) implementa as tarefas do [backlog](backlog.md) em cópias isoladas do baseline, com e sem as regras arquiteturais no contexto. O desenho está no [protocolo pré-registrado](protocolo.md); as decisões, nos ADR-016 a ADR-022 de [decisoes.md](../../docs/decisoes.md).
+Um agente de IA (Claude Code headless, `claude-sonnet-5-5`) implementa as tarefas do [backlog](backlog.md) em cópias isoladas do baseline, com e sem as regras arquiteturais no contexto. O desenho está no [protocolo pré-registrado](protocolo.md); as decisões, nos ADR-016 a ADR-024 de [decisoes.md](../../docs/decisoes.md).
 
 - [protocolo.md](protocolo.md): braços, hipóteses, métricas, desenho e análise, commitado antes da primeira execução
 - [agent-rules.md](agent-rules.md): regras em linguagem natural; o harness gera as variantes dos braços B e C
 - [backlog.md](backlog.md): tarefas T1–T6, com critérios de aceite e a tentação de cada uma
 - [acceptance/](acceptance/): testes de aceite ocultos, um por tarefa, que entram na cópia só depois do agente
 - [preflight.md](preflight.md): checagem do ambiente antes do piloto
+- [discussao.md](discussao.md): leitura dos resultados contra H1–H3 e a lacuna
 - `pilot/`, `runs/`: artefatos por execução (piloto e plano); `results/`: `runs.csv` e `summary.md`; `blind/`: ground truth cego
 
 ## Como rodar
