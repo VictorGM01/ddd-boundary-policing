@@ -44,7 +44,7 @@ function merge() {
   }
   writeFileSync(join(BLIND, 'labels.csv'), `${lines.join('\n')}\n`);
   const ids = readdirSync(BLIND).filter((f) => f.endsWith('.patch')).map((f) => f.replace('.patch', ''));
-  const labelled = new Set(lines.slice(1).map((l) => l.split(',')[0]));
+  const labelled = new Set(lines.slice(1).map((l) => l.split(',')[0].replace(/"/g, '')));
   const missing = ids.filter((id) => !labelled.has(id));
   console.log(`merged ${parts.length} file(s), ${lines.length - 1} rows; diffs without labels: ${missing.join(', ') || 'none'}`);
 }
@@ -52,7 +52,7 @@ function merge() {
 function review() {
   const labels = readFileSync(join(BLIND, 'labels.csv'), 'utf8').trim().split('\n').slice(1);
   const byId = {};
-  for (const l of labels) (byId[l.split(',')[0]] ??= []).push(l);
+  for (const l of labels) (byId[l.split(',')[0].replace(/"/g, '')] ??= []).push(l);
   const ids = Object.keys(byId).sort();
   // Deterministic sample: every k-th id, so it mixes diffs with and without violations.
   const k = Math.max(1, Math.floor(ids.length / 10));
@@ -60,7 +60,7 @@ function review() {
   const md = [
     '# Revisão humana da rotulagem cega',
     '',
-    'Amostra determinística (um a cada k diffs, em ordem de id) dos diffs rotulados pelos subagentes. Para cada um, abra o `.patch`, confira as violações rotuladas e anote se concorda, se falta alguma ou se alguma não é violação. O mapeamento para braço e tarefa está em `../blind-mapping.json`; abra-o só depois de revisar, para não enviesar a revisão.',
+    'Amostra determinística (um a cada k diffs, em ordem de id) dos diffs rotulados pelos subagentes. Para cada um, abra o `.patch`, confira as violações rotuladas e anote se concorda, se falta alguma ou se alguma não é violação. O mapeamento para braço e tarefa está em `../blind-mapping.json`; abra-o só depois de revisar, para não enviesar a revisão. Os rotuladores não viram `context-map.json`: um rótulo `V1.b-new-relation` só vira violação se a execução não declarou a relação no mapa (ADR-024).',
     '',
     ...sample.flatMap((id) => [
       `## ${id} · [${id}.patch](${id}.patch)`,

@@ -7,3 +7,7 @@ Lido por `npm run e1 -- --finish`: cada linha que começa com "- " entra na seç
 - Sem container: o agente rodou com as permissões do usuário no Mac (ADR-018). O harness procura caminhos fora da cópia nas chamadas de ferramenta; ocorrências aparecem nesta lista, por execução.
 - Testes de aceite parciais em T2 (preço de prescrição não verificável) e T4 (fatura paga não verificável); T3 e T6 aceitam formatos variados (ADR-020).
 - Decisões tomadas sem o aluno: estão nos ADR-016 a ADR-022 (e seguintes) de docs/decisoes.md.
+- Alertas de "possível menção às regras" no braço A são falsos positivos: o próprio agente tentou `cat .dependency-cruiser*` porque o pacote está nos devDependencies do `package.json` (ADR-017); o arquivo não existe na cópia e o comando não devolveu nada. Confira em qualquer `transcript.jsonl` citado.
+- T2 e T6: um teste de aceite falha em todas as execuções dos três braços, porque verifica um critério que está só no backlog em português, não no enunciado que o agente recebe (ADR-024). Leia o sucesso funcional dessas tarefas pelos testes que passam, não pelo aceite completo.
+- O braço C foi lançado à mão cerca de 12 horas depois do fim de A+B (a cadeia automática ficou presa num `pgrep` que encontrava a si mesmo). Mesmo harness, modelo e versão; ver ADR-024.
+- Rotulagem cega feita por subagentes (modelo de linguagem), não por humanos: revise a amostra em `blind/revisao-humana.md`.

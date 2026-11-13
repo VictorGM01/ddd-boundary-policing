@@ -82,4 +82,7 @@ Por execução e agregadas por braço e por tarefa:
 
 Qualquer mudança neste protocolo depois do commit vai para esta seção, com data, motivo e se aconteceu antes ou depois de ver resultados.
 
-- (nenhum até o momento)
+- **2026-11-12, antes do plano, depois do piloto.** Braço C incluído no mesmo plano como bloco separado depois de A+B, porque a projeção de custo ficou muito abaixo do limite (ADR-023). Alerta de "testes alterados" do harness ajustado (não afeta métricas).
+- **2026-11-13, depois do plano, antes da rotulagem.** `context-map.json` retirado das cópias cegas dos diffs para não revelar o braço; relações novas rotuladas como `V1.b-new-relation:<de>-><para>` e classificadas pelo agregador como declaradas (não violação) ou `V1.b-undeclared-relation`. Rotuladores podem ler o código do baseline (`src/`, `prisma/`) além dos três documentos (ADR-024).
+- **2026-11-13, depois de ver os resultados de aceite.** Registrado que um teste de aceite de T2 e um de T6 verificam critérios ausentes do enunciado em inglês e falham em todos os braços. Os testes não foram alterados; a limitação vai para as ameaças à validade (ADR-024).
+- **2026-11-13.** O braço C rodou cerca de 12 horas depois de A+B, lançado à mão (falha da cadeia automática), com harness, modelo e versão do Claude Code idênticos.

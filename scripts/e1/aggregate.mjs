@@ -161,19 +161,38 @@ function loadGroundTruth() {
   if (!existsSync(labelsFile) || !existsSync(mappingFile)) return null;
   const mapping = readJson(mappingFile, {});
   const byRun = {};
+  const declared = [];
   for (const row of parseCsv(readFileSync(labelsFile, 'utf8'))) {
     const runId = mapping[row.blind_id];
     if (!runId) continue;
     byRun[runId] ??= [];
-    if (CATEGORIES.includes(row.category)) byRun[runId].push(row);
+    if (!CATEGORIES.includes(row.category)) continue;
+    // Labelers never see context-map.json (it would reveal the arm), so they tag every relation outside
+    // the baseline map as V1.b-new-relation:<from>-><to>; it is a violation only if the run did not declare it (notes read provider → consumer).
+    const rel = /^V1\.b-new-relation:\s*([\w-]+)\s*->\s*([\w-]+)/i.exec(row.subcategory ?? '');
+    if (rel) {
+      const notes = readJson(join(E1, 'runs', runId, 'meta.json'), {}).restoreNotes ?? [];
+      if (notes.includes(`relation declared by agent: ${rel[2]} → ${rel[1]}`)) {
+        declared.push({ runId, ...row });
+        continue;
+      }
+      row.subcategory = 'V1.b-undeclared-relation';
+    }
+    byRun[runId].push(row);
   }
   const labelled = new Set(parseCsv(readFileSync(labelsFile, 'utf8')).map((r) => mapping[r.blind_id]).filter(Boolean));
-  return { byRun, labelled };
+  return { byRun, labelled, declared };
 }
 
 // A ground-truth violation counts as detected when the gate flagged the same file with a rule that
 // covers its category. Gate violations that match no labelled violation are false positives.
-function matchGate(gtViolations, gateViolations) {
+// Both tools often report the same import; an alert is one (rule, file) pair.
+function matchGate(gtViolations, rawGate) {
+  const seen = new Set();
+  const gateViolations = rawGate.filter((g) => {
+    const key = `${g.rule}|${normPath(g.file)}`;
+    return seen.has(key) ? false : seen.add(key);
+  });
   const usedGate = new Set();
   const matched = gtViolations.map((v) => {
     const idx = gateViolations.findIndex((g) => normPath(g.file) === normPath(v.file) && (RULE_CATEGORIES[g.rule] ?? []).includes(v.category));
@@ -182,8 +201,9 @@ function matchGate(gtViolations, gateViolations) {
     });
     return { ...v, detected: idx >= 0 };
   });
-  const fp = gateViolations.filter((_, i) => !usedGate.has(i));
-  return { matched, fp };
+  const labelledFiles = new Set(gtViolations.map((v) => normPath(v.file)));
+  const fp = gateViolations.filter((_, i) => !usedGate.has(i)).map((g) => ({ ...g, inLabelledFile: labelledFiles.has(normPath(g.file)) }));
+  return { matched, fp, alerts: gateViolations.length };
 }
 const normPath = (p) => String(p ?? '').replace(/^\.?\//, '').trim();
 
@@ -238,12 +258,13 @@ const rows = main.runs.map((r) => {
   const gateViolations = r.gate?.violations ?? [];
   const gtViolations = gt?.byRun[r.runId] ?? [];
   const labelled = gt?.labelled.has(r.runId) ?? false;
-  const { matched, fp } = labelled ? matchGate(gtViolations, gateViolations) : { matched: [], fp: [] };
+  const { matched, fp, alerts } = labelled ? matchGate(gtViolations, gateViolations) : { matched: [], fp: [], alerts: 0 };
   return {
     run: r,
     labelled,
     gtViolations: matched,
     gateFp: fp,
+    gateAlerts: alerts,
     csv: {
       run_id: r.runId,
       task: r.task,
@@ -295,6 +316,7 @@ w(
   `- Execuções planejadas: **${main.runs.length}** · concluídas: **${doneRows.length}** · falhadas: **${main.runs.filter((r) => r.status === 'failed').length}** · não executadas: **${main.runs.filter((r) => !['done', 'failed'].includes(r.status)).length}**`,
   `- Modelo do agente: \`${AGENT_MODEL}\` · Claude Code ${[...new Set(doneRows.map((r) => r.run.meta.claudeCodeVersion))].join(', ') || '—'} · semente da ordem: ${main.state?.seed ?? '—'}`,
   `- Ground truth cego: ${gtReady ? `**completo** (${doneRows.length} diffs rotulados)` : gt ? `parcial (${doneRows.filter((r) => r.labelled).length} de ${doneRows.length} diffs rotulados)` : '**pendente** (as seções que dependem dele ficam vazias)'}`,
+  `- Relações novas entre contextos rotuladas e **declaradas** pelo agente no mapa (não contam como violação): ${gt?.declared.length ? gt.declared.map((d) => `${d.runId} (${d.subcategory.replace(/^V1\.b-new-relation:\s*/i, '')})`).join(', ') : 'nenhuma'}`,
   '',
 );
 
@@ -365,7 +387,8 @@ if (gt) {
   w(
     `| **Total** | ${all.length} | ${tpAll} | ${all.length - tpAll} | ${pct(tpAll, all.length)} | ${pct(Object.values(seeded).reduce((s, x) => s + x.tp, 0), Object.values(seeded).reduce((s, x) => s + x.n, 0))} |`,
     '',
-    `- Alertas do gate sem violação rotulada correspondente (FP): **${fpAll}** em ${doneRows.filter((r) => r.gateFp.length).length} execução(ões).`,
+    `- Alertas do gate, contados uma vez por par (regra, arquivo) mesmo quando as duas ferramentas acusam: **${doneRows.reduce((s, r) => s + r.gateAlerts, 0)}**. Sem violação rotulada correspondente (FP): **${fpAll}** em ${doneRows.filter((r) => r.gateFp.length).length} execução(ões).`,
+    `- Dos FP, **${doneRows.reduce((s, r) => s + r.gateFp.filter((g) => g.inLabelledFile).length, 0)}** estão num arquivo que tem violação rotulada de outra categoria (o gate acusou o lugar certo com uma regra que não cobre a categoria do rótulo) e **${doneRows.reduce((s, r) => s + r.gateFp.filter((g) => !g.inLabelledFile).length, 0)}** em arquivo sem violação rotulada: ${[...new Set(doneRows.flatMap((r) => r.gateFp.filter((g) => !g.inLabelledFile).map((g) => `${r.run.runId} ${g.rule} \`${normPath(g.file)}\``)))].join('; ') || '—'}.`,
   );
   const fpRules = {};
   for (const r of doneRows) for (const g of r.gateFp) fpRules[g.rule] = (fpRules[g.rule] ?? 0) + 1;
@@ -401,7 +424,7 @@ const addTests = (label, countOf, eligible) => {
 };
 if (gt) {
   addTests('Ground truth (todas as categorias)', (r) => r.gtViolations.length, (r) => r.labelled);
-  addTests('Ground truth sem V1.b de relação nova não declarada', (r) => r.gtViolations.filter((v) => !/^V1\.b/i.test(v.subcategory ?? '')).length, (r) => r.labelled);
+  addTests('Ground truth sem V1.b de relação nova não declarada', (r) => r.gtViolations.filter((v) => v.subcategory !== 'V1.b-undeclared-relation').length, (r) => r.labelled);
 }
 addTests('Gate (violações reportadas)', (r) => r.run.gate?.violations?.length ?? 0, () => true);
 if (testRows.length) {
@@ -437,7 +460,7 @@ w(
   `| **Total do plano** | ${res.runs} | ${int(res.input)} | ${int(res.output)} | ${int(res.cacheRead)} | ${int(res.cacheCreation)} | ${num(res.cost)} | ${num(res.durationMs / 3_600_000)} h | ${int(res.turns)} |`,
   `| Piloto (fora dos resultados) | ${pres.runs} | ${int(pres.input)} | ${int(pres.output)} | ${int(pres.cacheRead)} | ${int(pres.cacheCreation)} | ${num(pres.cost)} | ${num(pres.durationMs / 3_600_000)} h | ${int(pres.turns)} |`,
   '',
-  `- Tempo de parede do plano: ${wall ? `${num(wall / 3_600_000)} h` : '—'} (concorrência ${main.state?.spec ? 2 : '—'}; inclui avaliação e pausas). Soma das durações das execuções do agente: ${num(res.durationMs / 3_600_000)} h.`,
+  `- Tempo de parede do plano: ${wall ? `${num(wall / 3_600_000)} h` : '—'} (concorrência ${main.state?.spec ? 2 : '—'}; inclui avaliação, pausas e o intervalo ocioso de cerca de 12 h entre o fim de A+B e o início do braço C, ADR-024). Soma das durações das execuções do agente: ${num(res.durationMs / 3_600_000)} h.`,
   `- Execuções refeitas (falha ou interrupção antes de concluir): ${retries}. Pausas por limite de uso: ${main.state?.pauses?.length ?? 0}.`,
   `- Máquina: ${m.model}, ${m.chip}, ${m.ramGb} GB de RAM, ${m.os}, Node ${m.node}, Claude Code ${[...new Set(doneRows.map((r) => r.run.meta.claudeCodeVersion))].join(', ') || '—'}.`,
   '- O consumo da sessão orquestradora (a sessão do Claude Code que montou o harness, rodou o piloto e fez a rotulagem) **não é medido pelo harness** e não está nos números acima.',
@@ -484,11 +507,13 @@ w(
   '- **Um só estudo de caso.** Um protótipo pequeno (4 contextos), escrito para o estudo. O comportamento do agente em bases maiores e menos regulares pode ser outro.',
   `- **Um só modelo e uma só ferramenta.** Todas as execuções usam \`${AGENT_MODEL}\` no Claude Code, com esforço e limites fixos. Outros modelos e agentes podem errar mais, menos ou de outro jeito.`,
   '- **n pequeno.** 3 repetições por célula; os testes estatísticos são exploratórios.',
-  '- **Rotulagem por LLM.** O ground truth foi produzido por subagentes de um modelo de linguagem, cegos para braço, tarefa e gate, e não por humanos. Há uma amostra para revisão humana em `blind/revisao-humana.md`. A cegueira é imperfeita: um diff do braço B pode se denunciar (por exemplo, um `context-map.json` criado pelo agente ou um comentário citando uma regra).',
+  '- **Rotulagem por LLM.** O ground truth foi produzido por subagentes de um modelo de linguagem, cegos para braço, tarefa e gate, e não por humanos. Há uma amostra para revisão humana em `blind/revisao-humana.md`. A cegueira é imperfeita: `context-map.json` foi retirado dos diffs (ADR-024), mas um comentário ou o estilo da solução ainda pode denunciar o braço.',
   '- **Tarefas e regras do mesmo autor.** As tarefas do backlog foram desenhadas por quem desenhou as regras, com a tentação de violação em mente.',
   '- **Não determinismo.** O mesmo prompt produz soluções diferentes; a variância entre repetições é parte do resultado.',
   '- **Critério de detecção por arquivo e categoria.** Uma violação conta como detectada quando o gate acusa o mesmo arquivo com uma regra que cobre a categoria; isso pode superestimar a detecção quando o arquivo tem várias violações.',
   '- **Testes de aceite parciais.** T2 não verifica o preço de uma prescrição precificada e T4 não verifica fatura paga (o enunciado não define essas interfaces); T3 e T6 aceitam formatos de resposta variados.',
+  '- **Critérios de aceite fora do enunciado.** Um teste de T2 (prescrição sem preço não impede as demais linhas) e um de T6 (quem ainda espera entra no máximo) verificam critérios que estão só no backlog em português, não no enunciado em inglês dado ao agente; falham em todos os braços (ADR-024). Não enviesam a comparação entre braços, mas o aceite completo dessas tarefas não mede o que o agente foi pedido a fazer.',
+  '- **Braço C em outro horário.** O braço C rodou cerca de 12 horas depois de A+B (ADR-024); a comparação B×C supõe que o serviço do modelo não mudou nesse intervalo.',
   '',
 );
 
