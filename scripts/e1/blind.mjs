@@ -57,27 +57,35 @@ function review() {
   // Deterministic sample: every k-th id, so it mixes diffs with and without violations.
   const k = Math.max(1, Math.floor(ids.length / 10));
   const sample = ids.filter((_, i) => i % k === 0).slice(0, 10);
+  // Every-k missed whole categories, so diffs labelled with the rarer categories are added by label (never by arm).
+  const extra = ids.filter((id) => !sample.includes(id) && byId[id].some((l) => /^"?d-[0-9a-f]+"?,"?[^,]*"?,"?(V3|V6)"?,/.test(l)));
+  const entry = (id) => [
+    `## ${id} · [${id}.patch](${id}.patch)`,
+    '',
+    '```csv',
+    HEADER,
+    ...byId[id],
+    '```',
+    '',
+    '- [ ] concordo com todos os rótulos',
+    '- Violações que faltam: ',
+    '- Rótulos que não são violação: ',
+    '',
+  ];
   const md = [
     '# Revisão humana da rotulagem cega',
     '',
     'Amostra determinística (um a cada k diffs, em ordem de id) dos diffs rotulados pelos subagentes. Para cada um, abra o `.patch`, confira as violações rotuladas e anote se concorda, se falta alguma ou se alguma não é violação. O mapeamento para braço e tarefa está em `../blind-mapping.json`; abra-o só depois de revisar, para não enviesar a revisão. Os rotuladores não viram `context-map.json`: um rótulo `V1.b-new-relation` só vira violação se a execução não declarou a relação no mapa (ADR-024).',
     '',
-    ...sample.flatMap((id) => [
-      `## ${id} · [${id}.patch](${id}.patch)`,
-      '',
-      '```csv',
-      HEADER,
-      ...byId[id],
-      '```',
-      '',
-      '- [ ] concordo com todos os rótulos',
-      '- Violações que faltam: ',
-      '- Rótulos que não são violação: ',
-      '',
-    ]),
+    ...sample.flatMap(entry),
+    '# Amostra complementar: diffs com rótulos V3 ou V6',
+    '',
+    'A amostra acima, um a cada k ids, não pegou nenhum diff com V3 e só um com V6. Aqui entram todos os outros diffs rotulados com essas categorias, escolhidos só pelo rótulo, sem olhar braço ou tarefa.',
+    '',
+    ...extra.flatMap(entry),
   ];
   writeFileSync(join(BLIND, 'revisao-humana.md'), md.join('\n'));
-  console.log(`wrote revisao-humana.md with ${sample.length} diffs`);
+  console.log(`wrote revisao-humana.md with ${sample.length} sampled + ${extra.length} V3/V6 diffs`);
 }
 
 if (argv.includes('--prepare')) prepare();
