@@ -15,7 +15,7 @@ Num monólito modular as fronteiras entre módulos são lógicas: nada impede um
 2. **Comunicação por eventos in-process.** Contextos só se falam por eventos de integração tipados (`@nestjs/event-emitter`), cujos contratos formam a Published Language em `src/contracts/`.
 3. **Policiamento estático no CI.** [Regras](docs/regras.md) derivadas do mapa, uma a uma, implementadas com dependency-cruiser e ESLint e executadas como quality gate obrigatório. As configurações leem [`context-map.json`](context-map.json) e o `schema.prisma`, então mudar o mapa muda as regras.
 
-A validação tem duas etapas: uma avaliação com **violações semeadas** (pronta, ver abaixo) e o experimento **E1**, em que um agente de IA implementa funcionalidades com e sem as regras no contexto (próxima etapa).
+A validação tem duas etapas: uma avaliação com **violações semeadas** (pronta, ver abaixo) e o experimento **E1**, em que um agente de IA implementa funcionalidades com e sem as regras no contexto (concluído, ver abaixo).
 
 ## Estudo de caso
 
@@ -46,7 +46,7 @@ scripts/eval-seeded.mjs       avaliação com violações semeadas
 test/                         e2e do fluxo completo
 docs/                         modelagem, regras e decisões
 experiments/seeded/           casos semeados e resultados
-experiments/e1/               preparação do E1 (regras do braço B, backlog)
+experiments/e1/               E1: protocolo, harness, execuções, ground truth cego e resultados
 ```
 
 ## Como rodar
@@ -84,7 +84,7 @@ Outros comandos: `npm run lint`, `npm run typecheck`, `npm run build`, `npm run 
 - [Decisões](docs/decisoes.md): ADRs curtos
 - Grafos gerados: [por camada](docs/grafo-de-contextos.md) · [por arquivo](docs/grafo-de-dependencias.md)
 - [Avaliação semeada](experiments/seeded/README.md) · [resultados](experiments/seeded/results/summary.md)
-- [Preparação do E1](experiments/e1/README.md)
+- [E1](experiments/e1/README.md) · [protocolo](experiments/e1/protocolo.md) · [resultados](experiments/e1/results/summary.md) · [discussão](experiments/e1/discussao.md)
 
 ## Estado atual
 
@@ -94,11 +94,11 @@ Pronto:
 - OE3: protótipo NestJS com 4 contextos, comunicação só por eventos, testes unitários de domínio e e2e do fluxo completo
 - OE4: 13 regras em duas ferramentas, gate `check:arch` e CI
 - Avaliação semeada: 52 casos (42 violações em V1–V6 e 10 controles legítimos). Revocação de 71,1% no escopo estático (V1–V5) e 0% em V6, como esperado; precisão de 96,4%; gate em cerca de 0,5 s por execução. Detalhes em [summary.md](experiments/seeded/results/summary.md).
+- E1: 54 execuções de um agente de IA (`claude-sonnet-5-5`, Claude Code headless) em 6 tarefas, braços A (sem regras), B (regras no contexto) e C (regras e gate), 3 repetições cada, a partir da tag `e1-baseline`. Execuções com violação no ground truth cego: A 10/18, B 3/18, C 4/18; o gate reprovou 9/18 no A e nenhuma no B e no C. Com as regras, o que sobra é vazamento de linguagem (V6), invisível para a análise estática. O gate detectou 37% das violações reais, contra 64% na avaliação semeada. Detalhes em [summary.md](experiments/e1/results/summary.md) e [discussao.md](experiments/e1/discussao.md); revisão humana da rotulagem em [revisao-humana.md](experiments/e1/blind/revisao-humana.md).
 
 Próximas etapas:
 
-- **E1:** harness do agente de IA nos braços A (sem regras) e B (com [agent-rules.md](experiments/e1/agent-rules.md)), sobre o [backlog](experiments/e1/backlog.md)
-- **E2 (condicional):** revisão semântica por LLM com o glossário, mirando os falsos negativos (V4 por forma, V6, RPC pelo barramento)
+- **E2 (condicional):** revisão semântica por LLM com o glossário, mirando os falsos negativos (V4 por forma, V6, RPC pelo barramento); o E1 mostrou que V6 é o resíduo que sobra quando o agente segue as regras, e os V6 rotulados no E1 servem de ground truth
 - Avaliação do ArchLintor quando estiver disponível ([ADR-010](docs/decisoes.md))
 
 ## Licença
