@@ -9,9 +9,10 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 "d-0723d7","d-0723d7-v1","V1","V1.b-new-relation:front-desk->clinical","src/modules/front-desk/api/clinical-events.listener.ts","@OnEvent(ClinicalEvents.EncounterStarted)","Front-desk imports the clinical contract and listens to a clinical event, but clinical is downstream (not upstream) of front-desk in the map, a relation outside the map (taxonomy V1.b) that also creates a cycle."
 ```
 
-- [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- [x] concordo com todos os rótulos
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: nenhum
+- Notas: Concordo com a categoria (relação nova fora do mapa original; só conta como violação se a execução não a declarou no mapa, cruzamento feito pelo script). Ressalva: a justificativa exagera ao dizer que "cria um ciclo": cada lado importa apenas o arquivo de contrato do outro, então não há ciclo de dependência (R12 não dispara), só uma relação bidirecional no mapa.
 
 ## d-29c209 · [d-29c209.patch](d-29c209.patch)
 
@@ -20,9 +21,10 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 "d-29c209","d-29c209-v1","V1","V1.b-new-relation:front-desk->clinical","src/modules/front-desk/api/clinical-events.listener.ts","@OnEvent(ClinicalEvents.EncounterStarted)","Front-desk imports the clinical contract and listens to a clinical event, but clinical is downstream (not upstream) of front-desk in the map, a relation outside the map (taxonomy V1.b) that also creates a cycle."
 ```
 
-- [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- [x] concordo com todos os rótulos
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: nenhum
+- Notas: Concordo com a categoria (relação nova fora do mapa original; só conta como violação se a execução não a declarou no mapa, cruzamento feito pelo script). Ressalva: a justificativa exagera ao dizer que "cria um ciclo": cada lado importa apenas o arquivo de contrato do outro, então não há ciclo de dependência (R12 não dispara), só uma relação bidirecional no mapa.
 
 ## d-34cf3e · [d-34cf3e.patch](d-34cf3e.patch)
 
@@ -31,9 +33,10 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 "d-34cf3e","d-34cf3e-none","NONE","","","","no violation found"
 ```
 
-- [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- [x] concordo com todos os rótulos
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: nenhum
+- Notas: Solução limpa: EncounterCompleted ganhou apenas `prescriptions: { medicationCode, quantity }[]`; nenhum diagnóstico ou anotação vai para o Faturamento; sem import cruzado nem chamada síncrona.
 
 ## d-421cf6 · [d-421cf6.patch](d-421cf6.patch)
 
@@ -42,9 +45,10 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 "d-421cf6","d-421cf6-none","NONE","","","","no violation found"
 ```
 
-- [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- [x] concordo com todos os rótulos
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: nenhum
+- Notas: Solução limpa: Agendamento passou a publicar `practitionerId` em AppointmentNoShow; o Faturamento guarda a própria cópia e expõe o relatório no próprio módulo, sem ler tabelas de outro contexto e sem `exports`. Ressalva funcional (não arquitetural): no-shows são contados a partir das cobranças, então um no-show sem cobrança não apareceria.
 
 ## d-501ef5 · [d-501ef5.patch](d-501ef5.patch)
 
@@ -55,8 +59,9 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 ```
 
 - [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: discutível: v1 e v2
+- Notas: **Discutível.** O agente criou um quinto contexto (`reporting`) alimentado por eventos, um padrão legítimo de read model em DDD. Uma única decisão de design foi contada como duas violações (v1 e v2). Só é violação no sentido de o contexto e suas relações não estarem declarados no mapa; a taxonomia não tem categoria específica para "contexto novo fora do mapa".
 
 ## d-6371b1 · [d-6371b1.patch](d-6371b1.patch)
 
@@ -65,9 +70,10 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 "d-6371b1","d-6371b1-none","NONE","","","","no violation found"
 ```
 
-- [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- [x] concordo com todos os rótulos
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: nenhum
+- Notas: Solução limpa: Agendamento passou a publicar `practitionerId` em AppointmentNoShow; o Faturamento guarda a própria cópia e expõe o relatório no próprio módulo, sem ler tabelas de outro contexto e sem `exports`. Ressalva funcional (não arquitetural): no-shows são contados a partir das cobranças, então um no-show sem cobrança não apareceria.
 
 ## d-8151c2 · [d-8151c2.patch](d-8151c2.patch)
 
@@ -76,9 +82,10 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 "d-8151c2","d-8151c2-v1","V1","V1.b-new-relation:front-desk->clinical","src/modules/front-desk/api/clinical-events.listener.ts","@OnEvent(ClinicalEvents.EncounterStarted)","Front-desk listens to a clinical event and imports clinical.events, but clinical is downstream (not upstream) of front-desk in the map, creating an unmapped relation and a cycle (V1.b)."
 ```
 
-- [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- [x] concordo com todos os rótulos
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: nenhum
+- Notas: Concordo com a categoria (relação nova fora do mapa original; só conta como violação se a execução não a declarou no mapa, cruzamento feito pelo script). Ressalva: a justificativa exagera ao dizer que "cria um ciclo": cada lado importa apenas o arquivo de contrato do outro, então não há ciclo de dependência (R12 não dispara), só uma relação bidirecional no mapa.
 
 ## d-976c6c · [d-976c6c.patch](d-976c6c.patch)
 
@@ -87,9 +94,10 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 "d-976c6c","d-976c6c-none","NONE","","","","no violation found"
 ```
 
-- [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- [x] concordo com todos os rótulos
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: nenhum
+- Notas: Solução limpa: Agendamento passou a publicar `practitionerId` em AppointmentNoShow; o Faturamento guarda a própria cópia e expõe o relatório no próprio módulo, sem ler tabelas de outro contexto e sem `exports`. Ressalva funcional (não arquitetural): no-shows são contados a partir das cobranças, então um no-show sem cobrança não apareceria.
 
 ## d-c9da04 · [d-c9da04.patch](d-c9da04.patch)
 
@@ -99,8 +107,9 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 ```
 
 - [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: discutível: v1
+- Notas: **Discutível.** O termo `refund` no Agendamento foi imposto pelo próprio enunciado da T1 (`{ "reason": "clinic", "refund": true }` no endpoint do Agendamento), o que é uma ameaça de desenho da tarefa. A parte questionável é o Agendamento decidir quando o estorno é permitido (RefundRequiresClinicCancellationError), o que pode ser lido como regra de cobrança no contexto errado.
 
 ## d-d983ed · [d-d983ed.patch](d-d983ed.patch)
 
@@ -109,9 +118,10 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 "d-d983ed","d-d983ed-none","NONE","","","","no violation found"
 ```
 
-- [ ] concordo com todos os rótulos
-- Violações que faltam: 
-- Rótulos que não são violação: 
+- [x] concordo com todos os rótulos
+- Violações que faltam: nenhuma
+- Rótulos que não são violação: nenhum
+- Notas: Solução limpa: EncounterCompleted ganhou apenas `prescriptions: { medicationCode, quantity }[]`; nenhum diagnóstico ou anotação vai para o Faturamento; sem import cruzado nem chamada síncrona.
 
 # Amostra complementar: diffs com rótulos V3 ou V6
 
@@ -237,4 +247,28 @@ blind_id,violation_id,category,subcategory,file,excerpt,justification
 
 - [ ] concordo com todos os rótulos
 - Violações que faltam: 
-- Rótulos que não são violação: 
+- Rótulos que não são violação:
+
+---
+
+## Resultado da revisão humana
+
+Revisão feita pelo aluno (Victor Gabriel Marques) em 13/11/2026, com apoio de um assistente de IA (Claude) que leu os diffs e propôs uma leitura de cada caso; os vereditos abaixo foram conferidos e confirmados pelo aluno. A revisão foi feita sem abrir `../blind-mapping.json`.
+
+| Veredito | Casos |
+|---|---|
+| Concordo | 8 (d-0723d7, d-29c209, d-8151c2, d-34cf3e, d-d983ed, d-421cf6, d-6371b1, d-976c6c) |
+| Discutível | 2 (d-501ef5, d-c9da04) |
+| Discordo | 0 |
+
+**Concordância: 8/10, sem discordâncias diretas.** Os dois casos discutíveis são de interpretação (como contar uma decisão de design e se um termo imposto pelo enunciado é vazamento), não de erro de fato do rotulador.
+
+## Revisão adicional, fora da amostra: rótulos V3
+
+Como nenhum rótulo V3 entrou na amostra e eles são o único acoplamento estrutural observado, foram revisados também os três diffs com V3 (d-5ba3e6, d-7d5773, d-f6ea3f). Esta revisão **não é cega** quanto à categoria, porque os diffs foram escolhidos por terem rótulo V3.
+
+- **Os rótulos V3 estão corretos**: o check-in da Recepção chama de forma síncrona um provider implementado pelo Faturamento, e o módulo do Faturamento exporta esse provider (em dois casos com `@Global()`).
+- **Violação não rotulada**: nos três diffs o agente criou `src/contracts/billing.queries.ts` com `abstract class OverdueBalanceQuery`, ou seja, uma interface de serviço síncrono dentro da Published Language. Além do V3, isso merece um rótulo **V4** (contrato deixa de ser payload de evento; regra R4).
+- **Contagem múltipla**: cada execução tem 3 a 4 rótulos (V1.b, V3, V3 e às vezes V1) para uma única decisão de design. Isso não afeta a proporção de execuções com ≥1 violação (H1), mas infla a contagem por execução (H2). Recomenda-se reportar também "decisões violadoras por execução".
+- **Exemplo qualitativo** (d-7d5773): o agente comentou `// Global so other contexts can inject the OverdueBalanceQuery contract without importing this module.` antes de `@Global()`, criando acoplamento por conveniência para fazer a injeção funcionar.
+
